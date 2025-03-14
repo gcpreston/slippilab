@@ -54,7 +54,6 @@ export function parsePacket(rawPacket: Uint8Array, spectateData: SpectateData | 
       offset = parseSubsequentEvent(rawData, offset, newSpectateData);
     }
   }
-  console.log('out of packet read loop, offset and length', offset, rawData.byteLength);
 
   return newSpectateData;
 

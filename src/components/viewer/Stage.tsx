@@ -1,10 +1,10 @@
 import { createMemo, For, Match, Switch } from "solid-js";
 import { stageNameByExternalId } from "~/common/ids";
-import { replayStore } from "~/state/replayStore";
+import { spectateStore } from "~/state/spectateStore";
 
 export function Stage() {
   const stageName = createMemo(
-    () => stageNameByExternalId[replayStore.replayData!.settings.stageId]
+    () => stageNameByExternalId[spectateStore.spectateData!.settings.stageId]
   );
   return (
     <Switch>
@@ -233,7 +233,7 @@ function YoshisStory() {
       1022: [-14.954894065856934, -103.4649963378906],
     };
     // return frameNumber to -123 based.
-    const frameInLap = (replayStore.frame - 123 + 1200) % 1200;
+    const frameInLap = (spectateStore.frame! - 123 + 1200) % 1200;
     const randallWidth = 11.9;
 
     if (frameInLap > 476 && frameInLap < 1016) {

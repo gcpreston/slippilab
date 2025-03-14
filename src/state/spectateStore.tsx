@@ -27,7 +27,7 @@ import { getPlayerOnFrame, getStartOfAction } from "~/viewer/viewerUtil";
 import colors from "tailwindcss/colors";
 import { action, landsAttack } from "~/search/framePredicates";
 import { decode } from "@shelacek/ubjson";
-import { parseFirstFrame, parsePacket } from "~/parser/liveParser";
+import { parsePacket } from "~/parser/liveParser";
 
 export interface RenderData {
   playerState: PlayerState;
@@ -50,7 +50,7 @@ export interface SpectateStore {
   highlights: Record<string, Highlight[]>;
   selectedHighlight?: [string, Highlight];
   animations: (CharacterAnimations | undefined)[];
-  frame: number;
+  frame?: number;
   renderDatas: RenderData[];
   fps: number;
   framesPerTick: number;
@@ -70,7 +70,7 @@ export const defaultReplayStoreState: SpectateStore = {
   highlights: Object.fromEntries(
     Object.entries(queries).map(([name]) => [name, []])
   ),
-  frame: 0,
+  frame: undefined,
   renderDatas: [],
   animations: Array(4).fill(undefined),
   fps: 60,
@@ -123,15 +123,7 @@ export function toggleFullscreen(): void {
   setReplayState("isFullscreen", (isFullscreen) => !isFullscreen);
 }
 
-export function jump(target: number): void {
-  setReplayState("frame", wrapFrame(replayState, target));
-}
-
-// jumpPercent removed
-
-export function adjust(delta: number): void {
-  setReplayState("frame", (f) => wrapFrame(replayState, f + delta));
-}
+// Controls removed
 
 /* IDEA
  * Due to network, frames will not arrive perfectly on time.
@@ -154,9 +146,9 @@ createEffect(() => setReplayState("running", running()));
 // runs based on frames changes rn
 // probably want to change that
 createEffect(() => {
-  if (replayState.spectateData) {
-    const frameCount = replayState.spectateData.frames.length;
-    setReplayState("frame", frameCount);
+  if ((replayState.spectateData?.frames.length || 0) > 0) {
+    const frameCount = replayState.spectateData!.frames.length;
+    setReplayState("frame", frameCount - 1);
   }
 });
 
@@ -183,7 +175,6 @@ ws.onerror = (e) => {
 // need createeffect here?
 createEffect(() => {
   ws.onmessage = ({ data }: { data: Blob }) => {
-    console.log('setting packetbuffer to', [...replayState.packetBuffer, data]);
     setReplayState("packetBuffer", [...replayState.packetBuffer, data]);
   }
 });
@@ -195,11 +186,10 @@ createEffect(() => {
     const data = replayState.packetBuffer[0];
     const bufferRest = replayState.packetBuffer.slice(1);
     setReplayState("packetBuffer", bufferRest);
-    console.log('popped packetbuffer', bufferRest);
 
     data.arrayBuffer()
       .then((buf) => {
-        console.log('game frame ArrayBuffer', buf);
+        // console.log('game frame ArrayBuffer', buf);
         // mutate frames
         const newSpectateData = parsePacket(
           new Uint8Array(buf),
@@ -248,7 +238,9 @@ for (let playerIndex = 0; playerIndex < 4; playerIndex++) {
         if (playerSettings === undefined) {
           return undefined;
         }
-
+        if (replayState.frame === undefined) {
+          return undefined;
+        }
         if (replay.frames[replayState.frame] === undefined) {
           return undefined;
         }
@@ -296,7 +288,7 @@ createEffect(() => {
   }
   setReplayState(
     "renderDatas",
-    replayState.spectateData.frames[replayState.frame].players
+    replayState.frame === undefined ? [] : replayState.spectateData.frames[replayState.frame].players
       .filter((playerUpdate) => playerUpdate)
       .flatMap((playerUpdate) => {
         const animations = replayState.animations[playerUpdate.playerIndex];

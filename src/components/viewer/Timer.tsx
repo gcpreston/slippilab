@@ -1,5 +1,5 @@
 import { createMemo } from "solid-js";
-import { replayStore } from "~/state/replayStore";
+import { spectateStore } from "~/state/spectateStore";
 
 export function Timer() {
   const meleeHundredths = [
@@ -66,8 +66,8 @@ export function Timer() {
   ];
   const time = createMemo(() => {
     const frames =
-      replayStore.replayData!.settings.timerStart * 60 -
-      replayStore.frame +
+      spectateStore.spectateData!.settings.timerStart * 60 -
+      spectateStore.frame! +
       123;
     const minutes = Math.floor(frames / (60 * 60))
       .toString()

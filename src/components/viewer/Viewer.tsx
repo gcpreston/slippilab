@@ -9,11 +9,11 @@ import { Controls } from "~/components/viewer/Controls";
 
 export function Viewer() {
   const items = createMemo(
-    () => spectateStore.spectateData?.frames[spectateStore.frame]?.items ?? []
+    () => spectateStore.spectateData?.frames[spectateStore.frame!]?.items ?? []
   );
   return (
     <div class="flex flex-col overflow-y-auto pb-4">
-      <Show when={spectateStore.spectateData}>
+      <Show when={(spectateStore.spectateData?.frames.length || 0) > 0}>
         <svg class="rounded-t border bg-slate-50" viewBox="-365 -300 730 600">
           {/* up = positive y axis */}
           <g class="-scale-y-100">
@@ -25,7 +25,7 @@ export function Viewer() {
             <HUD />
           </g>
         </svg>
-        <Controls />
+        {/* <Controls /> */}
       </Show>
     </div>
   );

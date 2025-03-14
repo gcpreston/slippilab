@@ -3,11 +3,12 @@ import {
   PlayerUpdate,
   PlayerUpdateWithNana,
   ReplayData,
+  SpectateData,
 } from "~/common/types";
 
 export function getStartOfAction(
   playerState: PlayerState,
-  replayData: ReplayData
+  replayData: ReplayData | SpectateData
 ): number {
   let earliestStateOfAction = (
     getPlayerOnFrame(
@@ -37,7 +38,7 @@ export function getStartOfAction(
 export function getPlayerOnFrame(
   playerIndex: number,
   frameNumber: number,
-  replayData: ReplayData
+  replayData: ReplayData | SpectateData
 ): PlayerUpdate {
   return replayData.frames[frameNumber]?.players[playerIndex];
 }

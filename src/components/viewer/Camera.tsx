@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, ParentProps } from "solid-js";
-import { replayStore } from "~/state/replayStore";
+import { spectateStore } from "~/state/spectateStore";
 
 export function Camera(props: ParentProps) {
   const [center, setCenter] = createSignal<[number, number] | undefined>();
@@ -10,7 +10,7 @@ export function Camera(props: ParentProps) {
     const padding = [25, 25];
     const minimums = [100, 100];
 
-    const currentFrame = replayStore.replayData!.frames[replayStore.frame];
+    const currentFrame = spectateStore.spectateData!.frames[spectateStore.frame!];
     const focuses = currentFrame.players.filter(Boolean).map((player) => ({
       x: player.state.xPosition,
       y: player.state.yPosition,
@@ -34,7 +34,7 @@ export function Camera(props: ParentProps) {
     ]);
     setScale(
       (oldScaling) =>
-        replayStore.zoom *
+        spectateStore.zoom *
         smooth(oldScaling ?? 5, scaling, Math.max(...followSpeeds))
     );
   });

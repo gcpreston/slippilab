@@ -1,7 +1,7 @@
 import { createMemo, For, Match, Switch } from "solid-js";
 import { itemNamesById } from "~/common/ids";
 import { ItemUpdate, PlayerUpdate } from "~/common/types";
-import { replayStore, ReplayStore } from "~/state/replayStore";
+import { spectateStore, SpectateStore } from "~/state/spectateStore";
 
 // TODO: characters projectiles
 
@@ -119,7 +119,7 @@ function LuigiFireball(props: { item: ItemUpdate }) {
 
 function YoshiEgg(props: { item: ItemUpdate }) {
   // states: 0 = held, 1 = thrown, 2 = exploded
-  const ownerState = createMemo(() => getOwner(replayStore, props.item).state);
+  const ownerState = createMemo(() => getOwner(spectateStore, props.item).state);
   return (
     <>
       <circle
@@ -142,7 +142,7 @@ function YoshiEgg(props: { item: ItemUpdate }) {
 function Turnip(props: { item: ItemUpdate }) {
   // states: 0 = held, 1 = bouncing?, 2 = thrown
   // face: props.item.peachTurnipFace
-  const ownerState = createMemo(() => getOwner(replayStore, props.item).state);
+  const ownerState = createMemo(() => getOwner(spectateStore, props.item).state);
   return (
     <>
       <circle
@@ -280,6 +280,6 @@ function FlyGuy(props: { item: ItemUpdate }) {
   );
 }
 
-function getOwner(replayStore: ReplayStore, item: ItemUpdate): PlayerUpdate {
-  return replayStore.replayData!.frames[item.frameNumber].players[item.owner];
+function getOwner(spectateStore: SpectateStore, item: ItemUpdate): PlayerUpdate {
+  return spectateStore.spectateData!.frames[item.frameNumber].players[item.owner];
 }
