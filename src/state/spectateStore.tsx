@@ -1,6 +1,6 @@
 import createRAF, { targetFPS } from "@solid-primitives/raf";
 import { batch, createEffect, createResource } from "solid-js";
-import { createStore } from "solid-js/store";
+import { createStore, unwrap } from "solid-js/store";
 import {
   ActionName,
   actionNameById,
@@ -27,7 +27,7 @@ import { getPlayerOnFrame, getStartOfAction } from "~/viewer/viewerUtil";
 import colors from "tailwindcss/colors";
 import { action, landsAttack } from "~/search/framePredicates";
 import { decode } from "@shelacek/ubjson";
-import { parseFirstFrame, parseFrame } from "~/parser/liveParser";
+import { parseFirstFrame, parsePacket } from "~/parser/liveParser";
 
 export interface RenderData {
   playerState: PlayerState;
@@ -64,6 +64,7 @@ export interface SpectateStore {
   // IDEA
   // - Here, hold frames which have not yet been played + unfinalized ones
   // - on state update, play the first one
+  packetBuffer: Blob[];
 }
 export const defaultReplayStoreState: SpectateStore = {
   highlights: Object.fromEntries(
@@ -80,6 +81,7 @@ export const defaultReplayStoreState: SpectateStore = {
   isFullscreen: false,
   customAction: "Passive",
   customAttack: "Up Tilt",
+  packetBuffer: []
 };
 
 const [replayState, setReplayState] = createStore<SpectateStore>(
@@ -169,65 +171,68 @@ createEffect(() => {
 // TODO: Error handling
 console.log('initializing ws connection');
 const ws = new WebSocket('ws://localhost:5197');
-let spectateInitialized = false;
+// Would the buffer idea mitigate this problem, by reserving frame
+// processing for later, and therefore doing it in-order, sequentially,
+// within the context of solidjs state, rather than relying on a top-
+// level branch into state-world?
 
 ws.onerror = (e) => {
   console.log('WebSocket error:', e);
 };
 
-ws.onmessage = ({ data }: { data: Blob }) => {
-  if (spectateInitialized) { // (replayState.spectateData) {
-    // Receive subsequent frames
+// need createeffect here?
+createEffect(() => {
+  ws.onmessage = ({ data }: { data: Blob }) => {
+    console.log('setting packetbuffer to', [...replayState.packetBuffer, data]);
+    setReplayState("packetBuffer", [...replayState.packetBuffer, data]);
+  }
+});
+
+// Want this to run every time packetBuffer is updated.
+// And don't want it to run a second time before the first finishes.
+createEffect(() => {
+  if (replayState.packetBuffer.length > 0) {
+    const data = replayState.packetBuffer[0];
+    const bufferRest = replayState.packetBuffer.slice(1);
+    setReplayState("packetBuffer", bufferRest);
+    console.log('popped packetbuffer', bufferRest);
+
     data.arrayBuffer()
       .then((buf) => {
         console.log('game frame ArrayBuffer', buf);
-        const [type, data] = parseFrame(
+        // mutate frames
+        const newSpectateData = parsePacket(
           new Uint8Array(buf),
-          replayState.spectateData!.replayVersion,
-          replayState.spectateData!.frames
+          unwrap(replayState).spectateData
         );
 
-        let newSpectateData: SpectateData;
-
-        switch (type) {
-          case "frame":
-            console.log('got parsed frame', data);
-            const frame = data;
-            newSpectateData = {
-              ...spectateStore.spectateData!,
-              frames: [...replayState.spectateData!.frames, frame]
-            };
-            break;
-          case "game_ending":
-            const ending = data;
-            newSpectateData = {
-              ...spectateStore.spectateData!,
-              ending
-            };
-            break;
-          default:
-            return;
-        }
-
-        setReplayState("spectateData", newSpectateData);
-      });
-  } else {
-    spectateInitialized = true;
-    // Receive initial frame
-    data.arrayBuffer()
-      .then((buf) => {
-        debugger;
-        const settings = parseFirstFrame(new Uint8Array(buf));
-        const replayVersion = settings.replayFormatVersion;
-        const frames: Frame[] = [];
-
-        const initialSpectateData: SpectateData = { settings, frames, replayVersion };
-
-        setReplayState("spectateData", initialSpectateData);
-        console.log("initialized spectateData", initialSpectateData);
+        console.log("setting new spectateData", newSpectateData);
+        setReplayState({ spectateData: newSpectateData });
       });
   }
-}
+});
+
+// TODO: Keep frames as unfinalized ones
+// Will need to have frames as hash table from frame number -> frame
+/*
+createEffect(() => {
+  const latestFinalizedFrame = replayState.spectateData?.latestFinalizedFrame;
+
+  if (latestFinalizedFrame) {
+    const firstNonFinalizedFrameIndex = replayState.spectateData!.frames.findIndex(frame => frame.frameNumber > latestFinalizedFrame);
+
+    if (firstNonFinalizedFrameIndex) {
+      const unfinalizedFrames = replayState.spectateData!.frames.slice(firstNonFinalizedFrameIndex);
+      const newSpectateData = {
+        ...spectateStore.spectateData!,
+        frames: unfinalizedFrames
+      };
+      setReplayState("spectateData", newSpectateData);
+    }
+  }
+});
+*/
+
 // -------------------------
 
 const animationResources = [];

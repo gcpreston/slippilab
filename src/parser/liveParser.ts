@@ -6,6 +6,8 @@ import type {
   PlayerInputs,
   PlayerState,
   ReplayData,
+  CommandPayloadSizes,
+  SpectateData
 } from "~/common/types";
 
 // This is a basic parser for use in the browser. It is based off of the replay
@@ -13,65 +15,122 @@ import type {
 // need right now. slippi-js can work in the browser too if your build tool
 // de-node-ifies it enough.
 
-/**
- * internal use only. The size of each event is announced at the start of the
- * replay file. This is used to find the start of every event for parsing.
- */
-interface CommandPayloadSizes {
-  [commandByte: number]: number;
-}
 const firstVersion = "0.1.0.0";
 
-export function parseFirstFrame(rawPacket: Uint8Array): GameSettings {
+export function parsePacket(rawPacket: Uint8Array, spectateData: SpectateData | undefined): SpectateData {
   const rawData = new DataView(
     rawPacket.buffer,
     rawPacket.byteOffset
     // baseJson.raw.byteLength
   );
 
-  // The first two events are always Event Payloads and Game Start.
-  const commandPayloadSizes = parseEventPayloadsEvent(rawData, 0x00);
-  console.log('commandPayloadSizes:', commandPayloadSizes);
+  // TODO: TS fixes
+  let initialEvent = false;
+  let newSpectateData: SpectateData;
 
-  const gameSettings = parseGameStartEvent(
-    rawData,
-    0x01 + commandPayloadSizes[0x35],
-    // metadata
-  );
-  console.log('parsed game start event', gameSettings);
+  if (spectateData) {
+    newSpectateData = structuredClone(spectateData);
+  } else {
+    initialEvent = true;
+    newSpectateData = {
+      payloadSizes: undefined,
+      settings: undefined,
+      frames: [],
+      latestFinalizedFrame: undefined,
+      ending: undefined
+    };
+  }
 
-  return gameSettings
+  let offset = 0x00;
+
+  while (offset < rawData.byteLength) {
+    // offset = parseEvent(rawData, offset, newSpectateData);
+
+    // TODO: Understand replayVersion here
+    // TODO: TS fixes for knowing command payload -> game start -> everything else
+    if (initialEvent) {
+      offset = parseInitialEvent(rawData, offset, newSpectateData);
+    } else {
+      offset = parseSubsequentEvent(rawData, offset, newSpectateData);
+    }
+  }
+  console.log('out of packet read loop, offset and length', offset, rawData.byteLength);
+
+  return newSpectateData;
+
 }
 
 // Ok we actually maybe don't want to return a frame here because a frame
 // is created and updated across different slippi events
 // ACTUALLY: Frame events are batched together over the network
 // - this function should be recursive or something and return a Frame at the end
-export function parseFrame(rawPacket: Uint8Array, replayVersion: string, frames: Frame[]): ["frame", Frame] | ["game_ending", GameEnding] | ["split", null] {
-  const rawData = new DataView(
-    rawPacket.buffer,
-    rawPacket.byteOffset
-    // baseJson.raw.byteLength
-  );
 
-  const command = readUint(rawData, 8, replayVersion, firstVersion, 0);
+// flow:
+// 1. receive frame start event; get or initialize frame
+// 2. receive a series of frame update events; mutate frame
+// 3. at the end, return the frame, and update it in state within the store
+//
+// What happens when this differs though?
+// Maybe could have a parseEvent-type function, which gets called from a
+// higher level (something similar to but not equal parseFrame, or just the store).
+// parseEvent: (rawPacket, offset, replayVersion, frames, payloadSizes) -> [newOffset, frame]
+
+// Mutates spectateData
+function parseInitialEvent(
+  rawData: DataView,
+  offset: number,
+  spectateData: SpectateData
+): number {
+  const command = readUint(rawData, 8, '3.18.0.0', firstVersion, offset); // TODO: replayVersion
   switch (command) {
-    case 0x37:
-      return ["frame", handlePreFrameUpdateEvent(rawData, 0, replayVersion, frames)];
-    case 0x38:
-      return ["frame", handlePostFrameUpdateEvent(rawData, 0, replayVersion, frames)];
-    case 0x39:
-      return ["game_ending", parseGameEndEvent(rawData, 0, replayVersion)];
-    case 0x3a:
-      return ["frame", handleFrameStartEvent(rawData, 0, replayVersion, frames)];
-    case 0x3b:
-      return ["frame", handleItemUpdateEvent(rawData, 0, replayVersion, frames)];
-    case 0x10:
-      // Gecko message split case
-      return ["split", null];
+    case 0x35:
+      const commandPayloadSizes = parseEventPayloadsEvent(rawData, offset); // this offset will always be 0
+      spectateData.payloadSizes = commandPayloadSizes;
+      break;
+    case 0x36:
+      const gameSettings = parseGameStartEvent(rawData, offset, /* metadata */);
+      spectateData.settings = gameSettings;
+      break;
+    default:
+      console.log(`Unexpected command 0x${command.toString(16)}.`);
   }
 
-  throw `Attempted parsing unknown command: 0x${command.toString(16)}`;
+  return offset + spectateData.payloadSizes[command] + 0x01;
+}
+
+// Mutates spectateData
+function parseSubsequentEvent(
+  rawData: DataView,
+  offset: number,
+  spectateData: SpectateData
+): number {
+  const replayVersion = spectateData.settings.replayFormatVersion;
+  const frames = spectateData.frames;
+  const payloadSizes = spectateData.payloadSizes;
+
+  const command = readUint(rawData, 8, replayVersion, firstVersion, offset);
+  switch (command) {
+    case 0x37:
+      handlePreFrameUpdateEvent(rawData, offset, replayVersion, frames);
+      break;
+    case 0x38:
+      handlePostFrameUpdateEvent(rawData, offset, replayVersion, frames);
+      break;
+    case 0x39:
+      const gameEnding = parseGameEndEvent(rawData, offset, replayVersion);
+      spectateData.ending = gameEnding;
+      break;
+    case 0x3a:
+      handleFrameStartEvent(rawData, offset, replayVersion, frames);
+      break;
+    case 0x3b:
+      handleItemUpdateEvent(rawData, offset, replayVersion, frames);
+      break;
+    default:
+      console.log(`Doing nothing for command 0x${command.toString(16)}.`);
+  }
+
+  return offset + payloadSizes[command] + 0x01;
 }
 
 function handlePreFrameUpdateEvent(
@@ -79,29 +138,26 @@ function handlePreFrameUpdateEvent(
   offset: number,
   replayVersion: string,
   frames: Frame[]
-): Frame {
+): void {
   const playerInputs = parsePreFrameUpdateEvent(rawData, offset, replayVersion);
   // Some older versions don't have the Frame Start Event so we have to
   // potentially initialize the frame in both places.
-  const frame = getOrInitFrame(frames, playerInputs.frameNumber);
-
+  initFrameIfNeeded(frames, playerInputs.frameNumber);
   initPlayerIfNeeded(
-    frame,
+    frames,
+    playerInputs.frameNumber,
     playerInputs.playerIndex
   );
-
   if (playerInputs.isNana) {
-    frame.players[
+    frames[playerInputs.frameNumber].players[
       playerInputs.playerIndex
       // @ts-ignore will only be readonly once parser is done
     ].nanaInputs = playerInputs;
   } else {
     // @ts-ignore will only be readonly once parser is done
-    frame.players[playerInputs.playerIndex].inputs =
+    frames[playerInputs.frameNumber].players[playerInputs.playerIndex].inputs =
       playerInputs;
   }
-
-  return frame;
 }
 
 function handlePostFrameUpdateEvent(
@@ -109,21 +165,17 @@ function handlePostFrameUpdateEvent(
   offset: number,
   replayVersion: string,
   frames: Frame[]
-): Frame {
+): void {
   const playerState = parsePostFrameUpdateEvent(rawData, offset, replayVersion);
-  const frame = getFrameClone(frames, playerState.frameNumber);
-
   if (playerState.isNana) {
     // @ts-ignore will only be readonly once parser is done
-    frame.players[playerState.playerIndex].nanaState =
+    frames[playerState.frameNumber].players[playerState.playerIndex].nanaState =
       playerState;
   } else {
     // @ts-ignore will only be readonly once parser is done
-    frame.players[playerState.playerIndex].state =
+    frames[playerState.frameNumber].players[playerState.playerIndex].state =
       playerState;
   }
-
-  return frame;
 }
 
 function handleFrameStartEvent(
@@ -131,16 +183,15 @@ function handleFrameStartEvent(
   offset: number,
   replayVersion: string,
   frames: Frame[]
-): Frame {
+): void {
   const { frameNumber, randomSeed } = parseFrameStartEvent(
     rawData,
     offset,
     replayVersion
   );
-  const frame = getOrInitFrame(frames, frameNumber);
+  initFrameIfNeeded(frames, frameNumber);
   // @ts-ignore will only be readonly once parser is done
-  frame.randomSeed = randomSeed;
-  return frame;
+  frames[frameNumber].randomSeed = randomSeed;
 }
 
 function handleItemUpdateEvent(
@@ -148,38 +199,31 @@ function handleItemUpdateEvent(
   offset: number,
   replayVersion: string,
   frames: Frame[]
-): Frame {
+): void {
   const itemUpdate = parseItemUpdateEvent(rawData, offset, replayVersion);
-  const frame = getOrInitFrame(frames, itemUpdate.frameNumber);
-  frame.items.push(itemUpdate);
-  return frame;
+  frames[itemUpdate.frameNumber].items.push(itemUpdate);
 }
 
-function getFrameClone(frames: Frame[], frameNumber: number): Frame {
-  return structuredClone(frames[frameNumber]);
-}
-
-function getOrInitFrame(frames: Frame[], frameNumber: number): Frame {
+function initFrameIfNeeded(frames: Frame[], frameNumber: number): void {
   if (frames[frameNumber] === undefined) {
     // @ts-expect-error: randomSeed will be populated later if found.
-    return {
+    frames[frameNumber] = {
       frameNumber: frameNumber,
       players: [],
       items: [],
     };
-  } else {
-    return getFrameClone(frames, frameNumber);
   }
 }
 
 function initPlayerIfNeeded(
-  frame: Frame,
+  frames: Frame[],
+  frameNumber: number,
   playerIndex: number
 ): void {
-  if (frame.players[playerIndex] === undefined) {
+  if (frames[frameNumber].players[playerIndex] === undefined) {
     // @ts-expect-error: state and inputs will be populated later.
-    frame.players[playerIndex] = {
-      frameNumber: frame.frameNumber,
+    frames[frameNumber].players[playerIndex] = {
+      frameNumber: frameNumber,
       playerIndex: playerIndex,
     };
   }

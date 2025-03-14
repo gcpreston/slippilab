@@ -9,16 +9,23 @@ export interface ReplayData {
   readonly ending: GameEnding;
 }
 /**
+ * internal use only. The size of each event is announced at the start of the
+ * replay file. This is used to find the start of every event for parsing.
+ */
+export interface CommandPayloadSizes {
+  [commandByte: number]: number;
+}
+/**
  * SpectateData is like a streamed version of ReplayData,
  * meaning the fields may incrementally not yet be present.
- * It is initialized on game start, so GameSettings should be present.
+ * It is initialized on game start.
  */
 export interface SpectateData {
+  readonly payloadSizes: CommandPayloadSizes;
   readonly settings: GameSettings;
-  frames: Frame[];
+  readonly latestFinalizedFrame?: number; // expects Slippi version >=3.7.0 due to this attribute
+  readonly frames: Frame[]; // refers to all current non-finalized frames
   ending?: GameEnding;
-
-  readonly replayVersion: string;
 }
 export interface GameSettings {
   /**

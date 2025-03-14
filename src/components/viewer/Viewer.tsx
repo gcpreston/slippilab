@@ -9,7 +9,7 @@ import { Controls } from "~/components/viewer/Controls";
 
 export function Viewer() {
   const items = createMemo(
-    () => spectateStore.spectateData?.frames[spectateStore.frame].items ?? []
+    () => spectateStore.spectateData?.frames[spectateStore.frame]?.items ?? []
   );
   return (
     <div class="flex flex-col overflow-y-auto pb-4">
