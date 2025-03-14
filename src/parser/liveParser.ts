@@ -38,13 +38,16 @@ export function parseFirstFrame(rawPacket: Uint8Array): GameSettings {
     0x01 + commandPayloadSizes[0x35],
     // metadata
   );
+  console.log('parsed game start event', gameSettings);
 
   return gameSettings
 }
 
 // Ok we actually maybe don't want to return a frame here because a frame
 // is created and updated across different slippi events
-export function parseFrame(rawPacket: Uint8Array, replayVersion: string, frames: Frame[]): ["frame", Frame] | ["game_ending", GameEnding] {
+// ACTUALLY: Frame events are batched together over the network
+// - this function should be recursive or something and return a Frame at the end
+export function parseFrame(rawPacket: Uint8Array, replayVersion: string, frames: Frame[]): ["frame", Frame] | ["game_ending", GameEnding] | ["split", null] {
   const rawData = new DataView(
     rawPacket.buffer,
     rawPacket.byteOffset
@@ -63,6 +66,9 @@ export function parseFrame(rawPacket: Uint8Array, replayVersion: string, frames:
       return ["frame", handleFrameStartEvent(rawData, 0, replayVersion, frames)];
     case 0x3b:
       return ["frame", handleItemUpdateEvent(rawData, 0, replayVersion, frames)];
+    case 0x10:
+      // Gecko message split case
+      return ["split", null];
   }
 
   throw `Attempted parsing unknown command: 0x${command.toString(16)}`;

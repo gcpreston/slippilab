@@ -167,20 +167,20 @@ createEffect(() => {
 // ------------------------------------
 // WebSocket one-time setup logic
 // TODO: Error handling
-console.log('initializing ws connection')
+console.log('initializing ws connection');
 const ws = new WebSocket('ws://localhost:5197');
-var seenGameStart = false;
+let spectateInitialized = false;
 
 ws.onerror = (e) => {
   console.log('WebSocket error:', e);
 };
 
 ws.onmessage = ({ data }: { data: Blob }) => {
-  if (seenGameStart) { // (replayState.spectateData) {
+  if (spectateInitialized) { // (replayState.spectateData) {
     // Receive subsequent frames
     data.arrayBuffer()
       .then((buf) => {
-        debugger;
+        console.log('game frame ArrayBuffer', buf);
         const [type, data] = parseFrame(
           new Uint8Array(buf),
           replayState.spectateData!.replayVersion,
@@ -191,6 +191,7 @@ ws.onmessage = ({ data }: { data: Blob }) => {
 
         switch (type) {
           case "frame":
+            console.log('got parsed frame', data);
             const frame = data;
             newSpectateData = {
               ...spectateStore.spectateData!,
@@ -204,11 +205,14 @@ ws.onmessage = ({ data }: { data: Blob }) => {
               ending
             };
             break;
+          default:
+            return;
         }
 
         setReplayState("spectateData", newSpectateData);
       });
   } else {
+    spectateInitialized = true;
     // Receive initial frame
     data.arrayBuffer()
       .then((buf) => {
@@ -220,11 +224,10 @@ ws.onmessage = ({ data }: { data: Blob }) => {
         const initialSpectateData: SpectateData = { settings, frames, replayVersion };
 
         setReplayState("spectateData", initialSpectateData);
-        seenGameStart = true;
         console.log("initialized spectateData", initialSpectateData);
       });
   }
-};
+}
 // -------------------------
 
 const animationResources = [];
@@ -240,6 +243,11 @@ for (let playerIndex = 0; playerIndex < 4; playerIndex++) {
         if (playerSettings === undefined) {
           return undefined;
         }
+
+        if (replay.frames[replayState.frame] === undefined) {
+          return undefined;
+        }
+
         const playerUpdate =
           replay.frames[replayState.frame].players[playerIndex];
         if (playerUpdate === undefined) {
