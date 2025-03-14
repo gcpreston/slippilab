@@ -22,78 +22,50 @@ interface CommandPayloadSizes {
 }
 const firstVersion = "0.1.0.0";
 
-export function parseGameSettings({ metadata, raw }: any): GameSettings {
+export function parseFirstFrame(rawPacket: Uint8Array): GameSettings {
   const rawData = new DataView(
-    raw.buffer,
-    raw.byteOffset
+    rawPacket.buffer,
+    rawPacket.byteOffset
     // baseJson.raw.byteLength
   );
-  const commandPayloadSizes = parseEventPayloadsEvent(rawData, 0x00);
-  const gameSettings = parseGameStartEvent(
-    rawData,
-    0x01 + commandPayloadSizes[0x35],
-    metadata
-  );
-  return gameSettings;
-}
 
-export function parseReplay({ metadata, raw }: any): ReplayData {
-  console.log("RAW:", raw);
-  console.log('raw buffer', raw.buffer);
-  console.log('raw byteoffset', raw.byteOffset);
-  const rawData = new DataView(
-    raw.buffer,
-    raw.byteOffset
-    // baseJson.raw.byteLength
-  );
-  console.log('rawdata', rawData);
   // The first two events are always Event Payloads and Game Start.
   const commandPayloadSizes = parseEventPayloadsEvent(rawData, 0x00);
-
-  const frames: Frame[] = [];
+  console.log('commandPayloadSizes:', commandPayloadSizes);
 
   const gameSettings = parseGameStartEvent(
     rawData,
     0x01 + commandPayloadSizes[0x35],
-    metadata
+    // metadata
   );
-  let gameEnding: GameEnding | undefined;
-  const replayVersion = gameSettings.replayFormatVersion;
-  let offset =
-    0x00 + commandPayloadSizes[0x35] + 0x01 + commandPayloadSizes[0x36] + 0x01;
-  // inputs/states may come multiple times for a given player on a given
-  // frame due to rollbacks. Because we are overwriting, we will just save the
-  // last one which will be the official "finalized" one.
-  while (offset < rawData.byteLength) {
-    const command = readUint(rawData, 8, replayVersion, firstVersion, offset);
-    switch (command) {
-      case 0x37:
-        handlePreFrameUpdateEvent(rawData, offset, replayVersion, frames);
-        break;
-      case 0x38:
-        handlePostFrameUpdateEvent(rawData, offset, replayVersion, frames);
-        break;
-      case 0x39:
-        gameEnding = parseGameEndEvent(rawData, offset, replayVersion);
-        break;
-      case 0x3a:
-        handleFrameStartEvent(rawData, offset, replayVersion, frames);
-        break;
-      case 0x3b:
-        handleItemUpdateEvent(rawData, offset, replayVersion, frames);
-        break;
-    }
-    offset = offset + commandPayloadSizes[command] + 0x01;
+
+  return gameSettings
+}
+
+// Ok we actually maybe don't want to return a frame here because a frame
+// is created and updated across different slippi events
+export function parseFrame(rawPacket: Uint8Array, replayVersion: string, frames: Frame[]): ["frame", Frame] | ["game_ending", GameEnding] {
+  const rawData = new DataView(
+    rawPacket.buffer,
+    rawPacket.byteOffset
+    // baseJson.raw.byteLength
+  );
+
+  const command = readUint(rawData, 8, replayVersion, firstVersion, 0);
+  switch (command) {
+    case 0x37:
+      return ["frame", handlePreFrameUpdateEvent(rawData, 0, replayVersion, frames)];
+    case 0x38:
+      return ["frame", handlePostFrameUpdateEvent(rawData, 0, replayVersion, frames)];
+    case 0x39:
+      return ["game_ending", parseGameEndEvent(rawData, 0, replayVersion)];
+    case 0x3a:
+      return ["frame", handleFrameStartEvent(rawData, 0, replayVersion, frames)];
+    case 0x3b:
+      return ["frame", handleItemUpdateEvent(rawData, 0, replayVersion, frames)];
   }
-  if (gameEnding === undefined) {
-    console.warn("Game end event not found");
-    // throw new Error("Game Ending not found");
-  }
-  return {
-    settings: gameSettings,
-    frames: frames,
-    ending: gameEnding as GameEnding,
-  };
+
+  throw `Attempted parsing unknown command: 0x${command.toString(16)}`;
 }
 
 function handlePreFrameUpdateEvent(
@@ -101,26 +73,29 @@ function handlePreFrameUpdateEvent(
   offset: number,
   replayVersion: string,
   frames: Frame[]
-): void {
+): Frame {
   const playerInputs = parsePreFrameUpdateEvent(rawData, offset, replayVersion);
   // Some older versions don't have the Frame Start Event so we have to
   // potentially initialize the frame in both places.
-  initFrameIfNeeded(frames, playerInputs.frameNumber);
+  const frame = getOrInitFrame(frames, playerInputs.frameNumber);
+
   initPlayerIfNeeded(
-    frames,
-    playerInputs.frameNumber,
+    frame,
     playerInputs.playerIndex
   );
+
   if (playerInputs.isNana) {
-    frames[playerInputs.frameNumber].players[
+    frame.players[
       playerInputs.playerIndex
       // @ts-ignore will only be readonly once parser is done
     ].nanaInputs = playerInputs;
   } else {
     // @ts-ignore will only be readonly once parser is done
-    frames[playerInputs.frameNumber].players[playerInputs.playerIndex].inputs =
+    frame.players[playerInputs.playerIndex].inputs =
       playerInputs;
   }
+
+  return frame;
 }
 
 function handlePostFrameUpdateEvent(
@@ -128,17 +103,21 @@ function handlePostFrameUpdateEvent(
   offset: number,
   replayVersion: string,
   frames: Frame[]
-): void {
+): Frame {
   const playerState = parsePostFrameUpdateEvent(rawData, offset, replayVersion);
+  const frame = getFrameClone(frames, playerState.frameNumber);
+
   if (playerState.isNana) {
     // @ts-ignore will only be readonly once parser is done
-    frames[playerState.frameNumber].players[playerState.playerIndex].nanaState =
+    frame.players[playerState.playerIndex].nanaState =
       playerState;
   } else {
     // @ts-ignore will only be readonly once parser is done
-    frames[playerState.frameNumber].players[playerState.playerIndex].state =
+    frame.players[playerState.playerIndex].state =
       playerState;
   }
+
+  return frame;
 }
 
 function handleFrameStartEvent(
@@ -146,15 +125,16 @@ function handleFrameStartEvent(
   offset: number,
   replayVersion: string,
   frames: Frame[]
-): void {
+): Frame {
   const { frameNumber, randomSeed } = parseFrameStartEvent(
     rawData,
     offset,
     replayVersion
   );
-  initFrameIfNeeded(frames, frameNumber);
+  const frame = getOrInitFrame(frames, frameNumber);
   // @ts-ignore will only be readonly once parser is done
-  frames[frameNumber].randomSeed = randomSeed;
+  frame.randomSeed = randomSeed;
+  return frame;
 }
 
 function handleItemUpdateEvent(
@@ -162,31 +142,38 @@ function handleItemUpdateEvent(
   offset: number,
   replayVersion: string,
   frames: Frame[]
-): void {
+): Frame {
   const itemUpdate = parseItemUpdateEvent(rawData, offset, replayVersion);
-  frames[itemUpdate.frameNumber].items.push(itemUpdate);
+  const frame = getOrInitFrame(frames, itemUpdate.frameNumber);
+  frame.items.push(itemUpdate);
+  return frame;
 }
 
-function initFrameIfNeeded(frames: Frame[], frameNumber: number): void {
+function getFrameClone(frames: Frame[], frameNumber: number): Frame {
+  return structuredClone(frames[frameNumber]);
+}
+
+function getOrInitFrame(frames: Frame[], frameNumber: number): Frame {
   if (frames[frameNumber] === undefined) {
     // @ts-expect-error: randomSeed will be populated later if found.
-    frames[frameNumber] = {
+    return {
       frameNumber: frameNumber,
       players: [],
       items: [],
     };
+  } else {
+    return getFrameClone(frames, frameNumber);
   }
 }
 
 function initPlayerIfNeeded(
-  frames: Frame[],
-  frameNumber: number,
+  frame: Frame,
   playerIndex: number
 ): void {
-  if (frames[frameNumber].players[playerIndex] === undefined) {
+  if (frame.players[playerIndex] === undefined) {
     // @ts-expect-error: state and inputs will be populated later.
-    frames[frameNumber].players[playerIndex] = {
-      frameNumber: frameNumber,
+    frame.players[playerIndex] = {
+      frameNumber: frame.frameNumber,
       playerIndex: playerIndex,
     };
   }

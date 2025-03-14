@@ -8,6 +8,18 @@ export interface ReplayData {
   /** Cause of game end. To determine winner you must examine the last frame. */
   readonly ending: GameEnding;
 }
+/**
+ * SpectateData is like a streamed version of ReplayData,
+ * meaning the fields may incrementally not yet be present.
+ * It is initialized on game start, so GameSettings should be present.
+ */
+export interface SpectateData {
+  readonly settings: GameSettings;
+  frames: Frame[];
+  ending?: GameEnding;
+
+  readonly replayVersion: string;
+}
 export interface GameSettings {
   /**
    * The version of the .slp spec that was used when the file was created. Some

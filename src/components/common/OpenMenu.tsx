@@ -25,6 +25,9 @@ export function OpenMenu(props: { name?: string }) {
           case "demo":
             loadFromCloud("sample", load);
             break;
+          case "live":
+            console.log(":)))");
+            break;
         }
       },
     })
@@ -86,6 +89,12 @@ export function OpenMenu(props: { name?: string }) {
                 class="w-full cursor-pointer py-2 px-4 hover:bg-slate-200"
               >
                 Load Demo
+              </li>
+              <li
+                {...api().getItemProps({ id: "live" })}
+                class="w-full cursor-pointer py-2 px-4 hover:bg-slate-200"
+              >
+                Live
               </li>
             </ul>
           </div>

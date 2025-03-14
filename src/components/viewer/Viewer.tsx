@@ -4,16 +4,16 @@ import { HUD } from "~/components/viewer/HUD";
 import { Players } from "~/components/viewer/Player";
 import { Stage } from "~/components/viewer/Stage";
 import { Item } from "~/components/viewer/Item";
-import { replayStore } from "~/state/replayStore";
+import { spectateStore } from "~/state/spectateStore";
 import { Controls } from "~/components/viewer/Controls";
 
 export function Viewer() {
   const items = createMemo(
-    () => replayStore.replayData?.frames[replayStore.frame].items ?? []
+    () => spectateStore.spectateData?.frames[spectateStore.frame].items ?? []
   );
   return (
     <div class="flex flex-col overflow-y-auto pb-4">
-      <Show when={replayStore.replayData}>
+      <Show when={spectateStore.spectateData}>
         <svg class="rounded-t border bg-slate-50" viewBox="-365 -300 730 600">
           {/* up = positive y axis */}
           <g class="-scale-y-100">
