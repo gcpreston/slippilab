@@ -8,6 +8,7 @@ import { load } from "~/state/fileStore";
 import { Portal } from "solid-js/web";
 import { AddFolderIcon } from "~/components/common/icons";
 import { setSidebar } from "~/state/navigationStore";
+import { connectWS } from "~/state/spectateStore";
 
 export function OpenMenu(props: { name?: string }) {
   const [menuState, menuSend] = useMachine(
@@ -26,7 +27,7 @@ export function OpenMenu(props: { name?: string }) {
             loadFromCloud("sample", load);
             break;
           case "live":
-            console.log(":)))");
+            connectWS();
             break;
         }
       },

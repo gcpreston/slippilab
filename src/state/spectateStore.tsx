@@ -1,6 +1,7 @@
 import createRAF, { targetFPS } from "@solid-primitives/raf";
 import { batch, createEffect, createResource } from "solid-js";
 import { createStore, unwrap } from "solid-js/store";
+import { createToast, dismissToast } from "~/components/common/toaster";
 import {
   ActionName,
   actionNameById,
@@ -65,6 +66,7 @@ export interface SpectateStore {
   // - Here, hold frames which have not yet been played + unfinalized ones
   // - on state update, play the first one
   packetBuffer: Blob[];
+  ws?: WebSocket;
 }
 export const defaultReplayStoreState: SpectateStore = {
   highlights: Object.fromEntries(
@@ -159,25 +161,54 @@ createEffect(() => {
 //   - replay running effect should depend on spectateStore.frames (run the last frame always?)
 
 // ------------------------------------
-// WebSocket one-time setup logic
 // TODO: Error handling
-console.log('initializing ws connection');
-const ws = new WebSocket('ws://localhost:5197');
-// Would the buffer idea mitigate this problem, by reserving frame
-// processing for later, and therefore doing it in-order, sequentially,
-// within the context of solidjs state, rather than relying on a top-
-// level branch into state-world?
 
-ws.onerror = (e) => {
-  console.log('WebSocket error:', e);
-};
+export function connectWS(): WebSocket {
+  console.log('initializing ws connection');
+  const WS_URL = 'ws://localhost:5197';
+  const ws = new WebSocket(WS_URL);
 
-// need createeffect here?
-createEffect(() => {
-  ws.onmessage = ({ data }: { data: Blob }) => {
-    setReplayState("packetBuffer", [...replayState.packetBuffer, data]);
+  ws.onerror = (e) => {
+    console.log('WebSocket error:', e);
+
+    createToast({
+      title: `WebSocket connection error`,
+      duration: 2000,
+      render: () => (
+        <div>Failed to connect to {WS_URL}</div>
+      ),
+      placement: "top-end",
+    });
+  };
+
+  ws.onopen = () => {
+    setReplayState("ws", ws);
+
+    createToast({
+      title: `Connection success`,
+      duration: 2000,
+      render: () => (
+        <div>Streaming from {WS_URL}</div>
+      ),
+      placement: "top-end",
+    });
+  };
+
+  createEffect(() => {
+    ws.onmessage = ({ data }: { data: Blob }) => {
+      setReplayState("packetBuffer", [...replayState.packetBuffer, data]);
+    }
+  });
+
+  return ws;
+}
+
+export function closeWS(): void {
+  const maybeWs = replayState.ws;
+  if (maybeWs) {
+    maybeWs.close();
   }
-});
+}
 
 // Want this to run every time packetBuffer is updated.
 // And don't want it to run a second time before the first finishes.
