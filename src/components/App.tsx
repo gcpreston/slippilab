@@ -14,6 +14,7 @@ import { fetchAnimations } from "~/viewer/animationCache";
 import "~/state/fileStore";
 import "~/state/replayStore";
 import "~/state/spectateStore";
+import "~/state/playback";
 import "~/state/selectionStore";
 import { setSidebar } from "~/state/navigationStore";
 

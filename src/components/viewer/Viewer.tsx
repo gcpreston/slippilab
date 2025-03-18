@@ -4,16 +4,16 @@ import { HUD } from "~/components/viewer/HUD";
 import { Players } from "~/components/viewer/Player";
 import { Stage } from "~/components/viewer/Stage";
 import { Item } from "~/components/viewer/Item";
-import { spectateStore } from "~/state/spectateStore";
 import { Controls } from "~/components/viewer/Controls";
+import { playbackType, playbackStore } from "~/state/playback";
 
 export function Viewer() {
   const items = createMemo(
-    () => spectateStore.spectateData?.frames[spectateStore.frame!]?.items ?? []
+    () => playbackStore().playbackData?.frames[playbackStore().frame!]?.items ?? []
   );
   return (
     <div class="flex flex-col overflow-y-auto pb-4">
-      <Show when={(spectateStore.spectateData?.frames.length || 0) > 0}>
+      <Show when={(playbackStore().playbackData?.frames.length || 0) > 0}>
         <svg class="rounded-t border bg-slate-50" viewBox="-365 -300 730 600">
           {/* up = positive y axis */}
           <g class="-scale-y-100">
@@ -25,7 +25,7 @@ export function Viewer() {
             <HUD />
           </g>
         </svg>
-        {/* <Controls /> */}
+        {playbackType() === "replay" && <Controls />}
       </Show>
     </div>
   );

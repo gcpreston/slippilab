@@ -38,15 +38,11 @@ export function parseGameSettings({ metadata, raw }: any): GameSettings {
 }
 
 export function parseReplay({ metadata, raw }: any): ReplayData {
-  console.log("RAW:", raw);
-  console.log('raw buffer', raw.buffer);
-  console.log('raw byteoffset', raw.byteOffset);
   const rawData = new DataView(
     raw.buffer,
     raw.byteOffset
     // baseJson.raw.byteLength
   );
-  console.log('rawdata', rawData);
   // The first two events are always Event Payloads and Game Start.
   const commandPayloadSizes = parseEventPayloadsEvent(rawData, 0x00);
 

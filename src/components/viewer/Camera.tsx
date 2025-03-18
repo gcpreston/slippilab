@@ -1,16 +1,18 @@
 import { createEffect, createMemo, createSignal, ParentProps } from "solid-js";
-import { spectateStore } from "~/state/spectateStore";
+import { playbackStore } from "~/state/playback";
 
 export function Camera(props: ParentProps) {
   const [center, setCenter] = createSignal<[number, number] | undefined>();
   const [scale, setScale] = createSignal<number | undefined>();
 
   createEffect(() => {
+    const store = playbackStore();
+
     const followSpeeds = [0.04, 0.04];
     const padding = [25, 25];
     const minimums = [100, 100];
 
-    const currentFrame = spectateStore.spectateData!.frames[spectateStore.frame!];
+    const currentFrame = store.playbackData!.frames[store.frame!];
     const focuses = currentFrame.players.filter(Boolean).map((player) => ({
       x: player.state.xPosition,
       y: player.state.yPosition,
@@ -34,7 +36,7 @@ export function Camera(props: ParentProps) {
     ]);
     setScale(
       (oldScaling) =>
-        spectateStore.zoom *
+        store.zoom *
         smooth(oldScaling ?? 5, scaling, Math.max(...followSpeeds))
     );
   });

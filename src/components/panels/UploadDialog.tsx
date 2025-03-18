@@ -32,7 +32,7 @@ export function UploadDialog() {
 
     const { id, data, error } = await uploadReplay(
       file,
-      replayStore.replayData!
+      replayStore.playbackData!
     );
     if (data != null) {
       setUrl(`${window.location.origin}/${id}`);

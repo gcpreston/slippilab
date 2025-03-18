@@ -9,12 +9,12 @@ import {
   characterNameByInternalId,
 } from "~/common/ids";
 import {
-  PlayerInputs,
-  PlayerSettings,
   PlayerState,
   PlayerUpdate,
   PlayerUpdateWithNana,
   ReplayData,
+  RenderData,
+  ReplayStore,
 } from "~/common/types";
 import { parseReplay } from "~/parser/parser";
 import { queries } from "~/search/queries";
@@ -22,45 +22,12 @@ import { Highlight, search } from "~/search/search";
 import { currentSelectionStore } from "~/state/selectionStore";
 import { CharacterAnimations, fetchAnimations } from "~/viewer/animationCache";
 import { actionMapByInternalId } from "~/viewer/characters";
-import { Character } from "~/viewer/characters/character";
 import { getPlayerOnFrame, getStartOfAction } from "~/viewer/viewerUtil";
 import colors from "tailwindcss/colors";
 import { fileStore } from "~/state/fileStore";
 import { action, landsAttack } from "~/search/framePredicates";
 import { decode } from "@shelacek/ubjson";
 
-export interface RenderData {
-  playerState: PlayerState;
-  playerInputs: PlayerInputs;
-  playerSettings: PlayerSettings;
-
-  // main render
-  path?: string;
-  innerColor: string;
-  outerColor: string;
-  transforms: string[];
-
-  // shield/shine renders
-  animationName: string;
-  characterData: Character;
-}
-
-export interface ReplayStore {
-  replayData?: ReplayData;
-  highlights: Record<string, Highlight[]>;
-  selectedHighlight?: [string, Highlight];
-  animations: (CharacterAnimations | undefined)[];
-  frame: number;
-  renderDatas: RenderData[];
-  fps: number;
-  framesPerTick: number;
-  running: boolean;
-  zoom: number;
-  isDebug: boolean;
-  isFullscreen: boolean;
-  customAction: ActionName;
-  customAttack: AttackName;
-}
 export const defaultReplayStoreState: ReplayStore = {
   highlights: Object.fromEntries(
     Object.entries(queries).map(([name]) => [name, []])
@@ -86,10 +53,10 @@ export const replayStore = replayState;
 
 export function selectCustomAttack(attackName: AttackName) {
   setReplayState("customAttack", attackName);
-  if (replayState.replayData) {
+  if (replayState.playbackData) {
     setReplayState("highlights", (highlights) => ({
       ...highlights,
-      customAttack: search(replayState.replayData!, [
+      customAttack: search(replayState.playbackData!, [
         { predicate: landsAttack(replayState.customAttack) },
       ]),
     }));
@@ -98,10 +65,10 @@ export function selectCustomAttack(attackName: AttackName) {
 
 export function selectCustomAction(actionName: ActionName) {
   setReplayState("customAction", actionName);
-  if (replayState.replayData) {
+  if (replayState.playbackData) {
     setReplayState("highlights", (highlights) => ({
       ...highlights,
-      customAction: search(replayState.replayData!, [
+      customAction: search(replayState.playbackData!, [
         { predicate: action(replayState.customAction) },
       ]),
     }));
@@ -201,7 +168,7 @@ export function jump(target: number): void {
 export function jumpPercent(percent: number): void {
   setReplayState(
     "frame",
-    Math.round((replayState.replayData?.frames.length ?? 0) * percent)
+    Math.round((replayState.playbackData?.frames.length ?? 0) * percent)
   );
 }
 
@@ -243,7 +210,7 @@ createEffect(async () => {
     { predicate: landsAttack(replayState.customAttack) },
   ]);
   setReplayState({
-    replayData,
+    playbackData: replayData,
     highlights,
     frame: fileStore.urlStartFrame ?? 0,
     renderDatas: [],
@@ -258,7 +225,7 @@ for (let playerIndex = 0; playerIndex < 4; playerIndex++) {
   animationResources.push(
     createResource(
       () => {
-        const replay = replayState.replayData;
+        const replay = replayState.playbackData;
         if (replay === undefined) {
           return undefined;
         }
@@ -304,12 +271,12 @@ animationResources.forEach(([dataSignal], playerIndex) =>
 );
 
 createEffect(() => {
-  if (replayState.replayData === undefined) {
+  if (replayState.playbackData === undefined) {
     return;
   }
   setReplayState(
     "renderDatas",
-    replayState.replayData.frames[replayState.frame].players
+    replayState.playbackData.frames[replayState.frame].players
       .filter((playerUpdate) => playerUpdate)
       .flatMap((playerUpdate) => {
         const animations = replayState.animations[playerUpdate.playerIndex];
@@ -341,14 +308,14 @@ function computeRenderData(
     isNana ? "nanaInputs" : "inputs"
   ];
   const playerSettings = replayState
-    .replayData!.settings.playerSettings.filter(Boolean)
+    .playbackData!.settings.playerSettings.filter(Boolean)
     .find((settings) => settings.playerIndex === playerUpdate.playerIndex)!;
 
   const startOfActionPlayerState: PlayerState = (
     getPlayerOnFrame(
       playerUpdate.playerIndex,
-      getStartOfAction(playerState, replayState.replayData!),
-      replayState.replayData!
+      getStartOfAction(playerState, replayState.playbackData!),
+      replayState.playbackData!
     ) as PlayerUpdateWithNana
   )[isNana ? "nanaState" : "state"];
   const actionName = actionNameById[playerState.actionStateId];
@@ -434,7 +401,7 @@ function getDamageFlyRollRotation(
     getPlayerOnFrame(
       playerState.playerIndex,
       playerState.frameNumber - 1,
-      replayState.replayData!
+      replayState.playbackData!
     ) as PlayerUpdateWithNana
   )[playerState.isNana ? "nanaState" : "state"];
   const deltaX = playerState.xPosition - previousState.xPosition;
@@ -454,8 +421,8 @@ function getSpacieUpBRotation(
 ): number {
   const startOfActionPlayer = getPlayerOnFrame(
     playerState.playerIndex,
-    getStartOfAction(playerState, replayState.replayData!),
-    replayState.replayData!
+    getStartOfAction(playerState, replayState.playbackData!),
+    replayState.playbackData!
   );
   const joystickDegrees =
     ((startOfActionPlayer.inputs.processed.joystickY === 0 &&
@@ -500,9 +467,9 @@ export function getPlayerColor(
   playerIndex: number,
   isNana: boolean
 ): string {
-  if (replayState.replayData!.settings.isTeams) {
+  if (replayState.playbackData!.settings.isTeams) {
     const settings =
-      replayState.replayData!.settings.playerSettings[playerIndex];
+      replayState.playbackData!.settings.playerSettings[playerIndex];
     return [
       [colors.red["800"], colors.red["600"]],
       [colors.green["800"], colors.green["600"]],
@@ -518,10 +485,10 @@ export function getPlayerColor(
 }
 
 function wrapFrame(replayState: ReplayStore, frame: number): number {
-  if (!replayState.replayData) return frame;
+  if (!replayState.playbackData) return frame;
   return (
-    (frame + replayState.replayData.frames.length) %
-    replayState.replayData.frames.length
+    (frame + replayState.playbackData.frames.length) %
+    replayState.playbackData.frames.length
   );
 }
 

@@ -189,7 +189,7 @@ export function Controls() {
         type="range"
         ref={seekbarInput}
         value={replayStore.frame}
-        max={replayStore.replayData!.frames.length - 1}
+        max={replayStore.playbackData!.frames.length - 1}
         onInput={() => jump(seekbarInput.valueAsNumber)}
       />
       <div

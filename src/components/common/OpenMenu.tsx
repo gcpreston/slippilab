@@ -9,6 +9,7 @@ import { Portal } from "solid-js/web";
 import { AddFolderIcon } from "~/components/common/icons";
 import { setSidebar } from "~/state/navigationStore";
 import { connectWS } from "~/state/spectateStore";
+import { setPlaybackType } from "~/state/playback";
 
 export function OpenMenu(props: { name?: string }) {
   const [menuState, menuSend] = useMachine(
@@ -18,15 +19,19 @@ export function OpenMenu(props: { name?: string }) {
       onSelect: (value) => {
         switch (value) {
           case "file":
+            setPlaybackType("replay");
             fileInput.click();
             break;
           case "folder":
+            setPlaybackType("replay");
             folderInput.click();
             break;
           case "demo":
+            setPlaybackType("replay");
             loadFromCloud("sample", load);
             break;
           case "live":
+            setPlaybackType("spectate");
             connectWS();
             break;
         }

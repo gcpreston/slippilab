@@ -1,11 +1,101 @@
-/** */
-export interface ReplayData {
+// ---- FROM replatyStore.tsx ORIGINALLY
+import { ActionName, AttackName } from "~/common/ids";
+import { Character } from "~/viewer/characters/character";
+import { CharacterAnimations } from "~/viewer/animationCache";
+import { Highlight } from "~/search/search";
+
+export interface RenderData {
+  playerState: PlayerState;
+  playerInputs: PlayerInputs;
+  playerSettings: PlayerSettings;
+
+  // main render
+  path?: string;
+  innerColor: string;
+  outerColor: string;
+  transforms: string[];
+
+  // shield/shine renders
+  animationName: string;
+  characterData: Character;
+}
+
+/** An abstraction between replay and spectate stores. */
+/*
+interface PlaybackStore<T extends PlaybackData> {
+  playbackData?: T;
+  highlights: Record<string, Highlight[]>;
+  selectedHighlight?: [string, Highlight];
+  animations: (CharacterAnimations | undefined)[];
+  frame: number; // TODO: Figure out discrepency
+  renderDatas: RenderData[];
+  fps: number;
+  framesPerTick: number;
+  running: boolean;
+  zoom: number;
+  isDebug: boolean;
+  isFullscreen: boolean;
+  customAction: ActionName;
+  customAttack: AttackName;
+}
+*/
+
+export type PlaybackStore = ReplayStore | SpectateStore;
+
+export interface ReplayStore {
+  playbackData?: ReplayData;
+  highlights: Record<string, Highlight[]>;
+  selectedHighlight?: [string, Highlight];
+  animations: (CharacterAnimations | undefined)[];
+  frame: number;
+  renderDatas: RenderData[];
+  fps: number;
+  framesPerTick: number;
+  running: boolean;
+  zoom: number;
+  isDebug: boolean;
+  isFullscreen: boolean;
+  customAction: ActionName;
+  customAttack: AttackName;
+}
+
+export interface SpectateStore {
+  playbackData?: SpectateData;
+  highlights: Record<string, Highlight[]>;
+  selectedHighlight?: [string, Highlight];
+  animations: (CharacterAnimations | undefined)[];
+  frame?: number;
+  renderDatas: RenderData[];
+  fps: number;
+  framesPerTick: number;
+  running: boolean;
+  zoom: number;
+  isDebug: boolean;
+  isFullscreen: boolean;
+  customAction: ActionName;
+  customAttack: AttackName;
+
+  // IDEA
+  // - Here, hold frames which have not yet been played + unfinalized ones
+  // - on state update, play the first one
+  packetBuffer: Blob[];
+  ws?: WebSocket;
+}
+
+// ---- END FROM replayStore.tsx
+
+export interface PlaybackData {
   readonly settings: GameSettings;
   /**
    * Player control starts at 84. Timer starts at 123.
    */
   readonly frames: Frame[];
   /** Cause of game end. To determine winner you must examine the last frame. */
+  readonly ending?: GameEnding;
+}
+
+/** */
+export interface ReplayData extends PlaybackData {
   readonly ending: GameEnding;
 }
 /**
@@ -20,12 +110,9 @@ export interface CommandPayloadSizes {
  * meaning the fields may incrementally not yet be present.
  * It is initialized on game start.
  */
-export interface SpectateData {
+export interface SpectateData extends PlaybackData {
   readonly payloadSizes: CommandPayloadSizes;
-  readonly settings: GameSettings;
   readonly latestFinalizedFrame?: number; // expects Slippi version >=3.7.0 due to this attribute
-  readonly frames: Frame[]; // refers to all current non-finalized frames
-  ending?: GameEnding;
 }
 export interface GameSettings {
   /**

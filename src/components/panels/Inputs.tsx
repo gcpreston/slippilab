@@ -25,7 +25,7 @@ export function Inputs() {
 
 function Summary(props: { playerIndex: number }) {
   const settings = createMemo(
-    () => replayStore.replayData?.settings.playerSettings[props.playerIndex]
+    () => replayStore.playbackData?.settings.playerSettings[props.playerIndex]
   );
   const renderData = createMemo(() => {
     return replayStore.renderDatas.find(
@@ -78,7 +78,7 @@ function Controller(
   props: { playerIndex: number } & JSX.HTMLAttributes<SVGSVGElement>
 ) {
   const settings = createMemo(
-    () => replayStore.replayData?.settings.playerSettings[props.playerIndex]
+    () => replayStore.playbackData?.settings.playerSettings[props.playerIndex]
   );
   const inputs = createMemo(() => {
     return replayStore.renderDatas.find(

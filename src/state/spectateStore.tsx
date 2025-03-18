@@ -17,6 +17,8 @@ import {
   PlayerUpdate,
   PlayerUpdateWithNana,
   SpectateData,
+  RenderData,
+  SpectateStore,
 } from "~/common/types";
 import { parseReplay } from "~/parser/parser";
 import { queries } from "~/search/queries";
@@ -30,45 +32,7 @@ import { action, landsAttack } from "~/search/framePredicates";
 import { decode } from "@shelacek/ubjson";
 import { parsePacket } from "~/parser/liveParser";
 
-export interface RenderData {
-  playerState: PlayerState;
-  playerInputs: PlayerInputs;
-  playerSettings: PlayerSettings;
-
-  // main render
-  path?: string;
-  innerColor: string;
-  outerColor: string;
-  transforms: string[];
-
-  // shield/shine renders
-  animationName: string;
-  characterData: Character;
-}
-
-export interface SpectateStore {
-  spectateData?: SpectateData;
-  highlights: Record<string, Highlight[]>;
-  selectedHighlight?: [string, Highlight];
-  animations: (CharacterAnimations | undefined)[];
-  frame?: number;
-  renderDatas: RenderData[];
-  fps: number;
-  framesPerTick: number;
-  running: boolean;
-  zoom: number;
-  isDebug: boolean;
-  isFullscreen: boolean;
-  customAction: ActionName;
-  customAttack: AttackName;
-
-  // IDEA
-  // - Here, hold frames which have not yet been played + unfinalized ones
-  // - on state update, play the first one
-  packetBuffer: Blob[];
-  ws?: WebSocket;
-}
-export const defaultReplayStoreState: SpectateStore = {
+export const defaultSpectateStoreState: SpectateStore = {
   highlights: Object.fromEntries(
     Object.entries(queries).map(([name]) => [name, []])
   ),
@@ -87,7 +51,7 @@ export const defaultReplayStoreState: SpectateStore = {
 };
 
 const [replayState, setReplayState] = createStore<SpectateStore>(
-  defaultReplayStoreState
+  defaultSpectateStoreState
 );
 
 export const spectateStore = replayState;
@@ -148,8 +112,8 @@ createEffect(() => setReplayState("running", running()));
 // runs based on frames changes rn
 // probably want to change that
 createEffect(() => {
-  if ((replayState.spectateData?.frames.length || 0) > 0) {
-    const frameCount = replayState.spectateData!.frames.length;
+  if ((replayState.playbackData?.frames.length || 0) > 0) {
+    const frameCount = replayState.playbackData!.frames.length;
     setReplayState("frame", frameCount - 1);
   }
 });
@@ -224,11 +188,11 @@ createEffect(() => {
         // mutate frames
         const newSpectateData = parsePacket(
           new Uint8Array(buf),
-          unwrap(replayState).spectateData
+          unwrap(replayState).playbackData
         );
 
-        console.log("setting new spectateData", newSpectateData);
-        setReplayState({ spectateData: newSpectateData });
+        console.log("setting new playbackData", newSpectateData);
+        setReplayState({ playbackData: newSpectateData });
       });
   }
 });
@@ -237,18 +201,18 @@ createEffect(() => {
 // Will need to have frames as hash table from frame number -> frame
 /*
 createEffect(() => {
-  const latestFinalizedFrame = replayState.spectateData?.latestFinalizedFrame;
+  const latestFinalizedFrame = replayState.playbackData?.latestFinalizedFrame;
 
   if (latestFinalizedFrame) {
-    const firstNonFinalizedFrameIndex = replayState.spectateData!.frames.findIndex(frame => frame.frameNumber > latestFinalizedFrame);
+    const firstNonFinalizedFrameIndex = replayState.playbackData!.frames.findIndex(frame => frame.frameNumber > latestFinalizedFrame);
 
     if (firstNonFinalizedFrameIndex) {
-      const unfinalizedFrames = replayState.spectateData!.frames.slice(firstNonFinalizedFrameIndex);
+      const unfinalizedFrames = replayState.playbackData!.frames.slice(firstNonFinalizedFrameIndex);
       const newSpectateData = {
-        ...spectateStore.spectateData!,
+        ...spectateStore.playbackData!,
         frames: unfinalizedFrames
       };
-      setReplayState("spectateData", newSpectateData);
+      setReplayState("playbackData", newSpectateData);
     }
   }
 });
@@ -261,7 +225,7 @@ for (let playerIndex = 0; playerIndex < 4; playerIndex++) {
   animationResources.push(
     createResource(
       () => {
-        const replay = replayState.spectateData;
+        const replay = replayState.playbackData;
         if (replay === undefined) {
           return undefined;
         }
@@ -314,12 +278,12 @@ animationResources.forEach(([dataSignal], playerIndex) =>
 );
 
 createEffect(() => {
-  if (replayState.spectateData === undefined) {
+  if (replayState.playbackData === undefined) {
     return;
   }
   setReplayState(
     "renderDatas",
-    replayState.frame === undefined ? [] : replayState.spectateData.frames[replayState.frame].players
+    replayState.frame === undefined ? [] : replayState.playbackData.frames[replayState.frame].players
       .filter((playerUpdate) => playerUpdate)
       .flatMap((playerUpdate) => {
         const animations = replayState.animations[playerUpdate.playerIndex];
@@ -351,14 +315,14 @@ function computeRenderData(
     isNana ? "nanaInputs" : "inputs"
   ];
   const playerSettings = replayState
-    .spectateData!.settings.playerSettings.filter(Boolean)
+    .playbackData!.settings.playerSettings.filter(Boolean)
     .find((settings) => settings.playerIndex === playerUpdate.playerIndex)!;
 
   const startOfActionPlayerState: PlayerState = (
     getPlayerOnFrame(
       playerUpdate.playerIndex,
-      getStartOfAction(playerState, replayState.spectateData!),
-      replayState.spectateData!
+      getStartOfAction(playerState, replayState.playbackData!),
+      replayState.playbackData!
     ) as PlayerUpdateWithNana
   )[isNana ? "nanaState" : "state"];
   const actionName = actionNameById[playerState.actionStateId];
@@ -444,7 +408,7 @@ function getDamageFlyRollRotation(
     getPlayerOnFrame(
       playerState.playerIndex,
       playerState.frameNumber - 1,
-      replayState.spectateData!
+      replayState.playbackData!
     ) as PlayerUpdateWithNana
   )[playerState.isNana ? "nanaState" : "state"];
   const deltaX = playerState.xPosition - previousState.xPosition;
@@ -464,8 +428,8 @@ function getSpacieUpBRotation(
 ): number {
   const startOfActionPlayer = getPlayerOnFrame(
     playerState.playerIndex,
-    getStartOfAction(playerState, replayState.spectateData!),
-    replayState.spectateData!
+    getStartOfAction(playerState, replayState.playbackData!),
+    replayState.playbackData!
   );
   const joystickDegrees =
     ((startOfActionPlayer.inputs.processed.joystickY === 0 &&
@@ -510,9 +474,9 @@ export function getPlayerColor(
   playerIndex: number,
   isNana: boolean
 ): string {
-  if (replayState.spectateData!.settings.isTeams) {
+  if (replayState.playbackData!.settings.isTeams) {
     const settings =
-      replayState.spectateData!.settings.playerSettings[playerIndex];
+      replayState.playbackData!.settings.playerSettings[playerIndex];
     return [
       [colors.red["800"], colors.red["600"]],
       [colors.green["800"], colors.green["600"]],
@@ -528,10 +492,10 @@ export function getPlayerColor(
 }
 
 function wrapFrame(replayState: SpectateStore, frame: number): number {
-  if (!replayState.spectateData) return frame;
+  if (!replayState.playbackData) return frame;
   return (
-    (frame + replayState.spectateData.frames.length) %
-    replayState.spectateData.frames.length
+    (frame + replayState.playbackData.frames.length) %
+    replayState.playbackData.frames.length
   );
 }
 
