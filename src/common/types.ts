@@ -49,7 +49,7 @@ export type SpectateStore = PlaybackStore & {
   ws?: WebSocket;
 };
 
-export interface PlaybackData {
+export type PlaybackData = {
   readonly settings: GameSettings;
   /**
    * Player control starts at 84. Timer starts at 123.
@@ -60,23 +60,22 @@ export interface PlaybackData {
 }
 
 /** */
-export interface ReplayData extends PlaybackData {
+export type ReplayData = PlaybackData & {
   readonly ending: GameEnding;
-}
-/**
- * internal use only. The size of each event is announced at the start of the
- * replay file. This is used to find the start of every event for parsing.
- */
-export interface CommandPayloadSizes {
-  [commandByte: number]: number;
 }
 /**
  * SpectateData is like a streamed version of ReplayData,
  * meaning the fields may incrementally not yet be present.
  * It is initialized on game start.
  */
-export interface SpectateData extends PlaybackData {
-  readonly payloadSizes: CommandPayloadSizes;
+export type SpectateData = PlaybackData;
+
+/**
+ * internal use only. The size of each event is announced at the start of the
+ * replay file. This is used to find the start of every event for parsing.
+ */
+export interface CommandPayloadSizes {
+  [commandByte: number]: number;
 }
 
 export type PreFrameUpdateEvent = PlayerInputs;

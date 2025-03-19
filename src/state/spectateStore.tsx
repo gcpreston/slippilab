@@ -183,6 +183,10 @@ export function closeWS(): void {
   }
 }
 
+declare global {
+  var payloadSizes: CommandPayloadSizes | undefined;
+}
+
 globalThis.payloadSizes = undefined;
 
 // Want this to run every time packetBuffer is updated.
@@ -238,13 +242,13 @@ function setReplayStateFromGameEvent(gameEvent: GameEvent): void {
 }
 
 function handleEventPayloadsEvent(payloadSizes: EventPayloadsEvent) {
-  const playbackData: SpectateData = {
+  const initialPlaybackData: SpectateData = {
+    // @ts-expect-error: settings will be populated on game start
     settings: undefined,
-    payloadSizes,
     frames: [],
     ending: undefined
   }
-  setReplayState("playbackData", playbackData);
+  setReplayState("playbackData", initialPlaybackData);
 }
 
 function handleGameStartEvent(settings: GameStartEvent) {
@@ -348,7 +352,6 @@ function handleItemUpdateEvent(itemUpdate: ItemUpdateEvent): void {
   items.push(itemUpdate);
   frame = { ...frame, items };
   frames[itemUpdate.frameNumber] = frame;
-  console.log('handling item update, items:', frames[itemUpdate.frameNumber]);
   setReplayState("playbackData", { ...replayState.playbackData!, frames });
 }
 

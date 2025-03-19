@@ -70,7 +70,6 @@ function parseEvent(
 ): [number, GameEvent | null] {
 
   const replayVersion = maybeSpectateData?.settings.replayFormatVersion  ?? '3.18.0.0'; // TODO: replayVersion
-  // const payloadSizes = maybeSpectateData?.payloadSizes;
   const payloadSizes = globalThis.payloadSizes;
 
   const command = readUint(rawData, 8, replayVersion, firstVersion, offset);
@@ -109,8 +108,6 @@ function parseEvent(
       const itemUpdate = parseItemUpdateEvent(rawData, offset, replayVersion);
       gameEvent = { type: "item_update", data: itemUpdate };
       break;
-    default:
-      console.log(`Doing nothing for command 0x${command.toString(16)}.`);
   }
 
   return [offset + payloadSizes![command] + 0x01, gameEvent];
