@@ -36,7 +36,7 @@ export const defaultSpectateStoreState: SpectateStore = {
   highlights: Object.fromEntries(
     Object.entries(queries).map(([name]) => [name, []])
   ),
-  frame: undefined,
+  frame: 0,
   renderDatas: [],
   animations: Array(4).fill(undefined),
   fps: 60,
@@ -233,9 +233,6 @@ for (let playerIndex = 0; playerIndex < 4; playerIndex++) {
         if (playerSettings === undefined) {
           return undefined;
         }
-        if (replayState.frame === undefined) {
-          return undefined;
-        }
         if (replay.frames[replayState.frame] === undefined) {
           return undefined;
         }
@@ -283,7 +280,7 @@ createEffect(() => {
   }
   setReplayState(
     "renderDatas",
-    replayState.frame === undefined ? [] : replayState.playbackData.frames[replayState.frame].players
+    replayState.playbackData.frames.length <= replayState.frame ? [] : replayState.playbackData.frames[replayState.frame].players
       .filter((playerUpdate) => playerUpdate)
       .flatMap((playerUpdate) => {
         const animations = replayState.animations[playerUpdate.playerIndex];

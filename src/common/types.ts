@@ -40,10 +40,8 @@ interface PlaybackStore<T extends PlaybackData> {
 }
 */
 
-export type PlaybackStore = ReplayStore | SpectateStore;
-
-export interface ReplayStore {
-  playbackData?: ReplayData;
+export type PlaybackStore = {
+  playbackData?: PlaybackData;
   highlights: Record<string, Highlight[]>;
   selectedHighlight?: [string, Highlight];
   animations: (CharacterAnimations | undefined)[];
@@ -59,28 +57,18 @@ export interface ReplayStore {
   customAttack: AttackName;
 }
 
-export interface SpectateStore {
-  playbackData?: SpectateData;
-  highlights: Record<string, Highlight[]>;
-  selectedHighlight?: [string, Highlight];
-  animations: (CharacterAnimations | undefined)[];
-  frame?: number;
-  renderDatas: RenderData[];
-  fps: number;
-  framesPerTick: number;
-  running: boolean;
-  zoom: number;
-  isDebug: boolean;
-  isFullscreen: boolean;
-  customAction: ActionName;
-  customAttack: AttackName;
+export type ReplayStore = PlaybackStore & {
+  playbackData?: ReplayData;
+};
 
+export type SpectateStore = PlaybackStore & {
+  playbackData?: SpectateData;
   // IDEA
   // - Here, hold frames which have not yet been played + unfinalized ones
   // - on state update, play the first one
   packetBuffer: Blob[];
   ws?: WebSocket;
-}
+};
 
 // ---- END FROM replayStore.tsx
 
