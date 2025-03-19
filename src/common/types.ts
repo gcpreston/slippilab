@@ -1,4 +1,3 @@
-// ---- FROM replatyStore.tsx ORIGINALLY
 import { ActionName, AttackName } from "~/common/ids";
 import { Character } from "~/viewer/characters/character";
 import { CharacterAnimations } from "~/viewer/animationCache";
@@ -20,26 +19,6 @@ export interface RenderData {
   characterData: Character;
 }
 
-/** An abstraction between replay and spectate stores. */
-/*
-interface PlaybackStore<T extends PlaybackData> {
-  playbackData?: T;
-  highlights: Record<string, Highlight[]>;
-  selectedHighlight?: [string, Highlight];
-  animations: (CharacterAnimations | undefined)[];
-  frame: number; // TODO: Figure out discrepency
-  renderDatas: RenderData[];
-  fps: number;
-  framesPerTick: number;
-  running: boolean;
-  zoom: number;
-  isDebug: boolean;
-  isFullscreen: boolean;
-  customAction: ActionName;
-  customAttack: AttackName;
-}
-*/
-
 export type PlaybackStore = {
   playbackData?: PlaybackData;
   highlights: Record<string, Highlight[]>;
@@ -55,7 +34,7 @@ export type PlaybackStore = {
   isFullscreen: boolean;
   customAction: ActionName;
   customAttack: AttackName;
-}
+};
 
 export type ReplayStore = PlaybackStore & {
   playbackData?: ReplayData;
@@ -69,8 +48,6 @@ export type SpectateStore = PlaybackStore & {
   packetBuffer: Blob[];
   ws?: WebSocket;
 };
-
-// ---- END FROM replayStore.tsx
 
 export interface PlaybackData {
   readonly settings: GameSettings;
