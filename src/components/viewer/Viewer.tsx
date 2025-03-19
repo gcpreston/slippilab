@@ -9,7 +9,7 @@ import { playbackType, playbackStore } from "~/state/playback";
 
 export function Viewer() {
   const items = createMemo(
-    () => playbackStore().playbackData?.frames[playbackStore().frame!]?.items ?? []
+    () => playbackStore().playbackData?.frames[playbackStore().frame]?.items ?? []
   );
   return (
     <div class="flex flex-col overflow-y-auto pb-4">

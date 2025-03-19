@@ -7,7 +7,8 @@ import type {
   PlayerState,
   ReplayData,
   CommandPayloadSizes,
-  SpectateData
+  SpectateData,
+  GameEvent,
 } from "~/common/types";
 
 // This is a basic parser for use in the browser. It is based off of the replay
@@ -17,46 +18,26 @@ import type {
 
 const firstVersion = "0.1.0.0";
 
-export function parsePacket(rawPacket: Uint8Array, spectateData: SpectateData | undefined): SpectateData {
+export function parsePacket(rawPacket: Uint8Array, maybeSpectateData: SpectateData | undefined): GameEvent[] {
   const rawData = new DataView(
     rawPacket.buffer,
     rawPacket.byteOffset
     // baseJson.raw.byteLength
   );
 
-  // TODO: TS fixes
-  let initialEvent = false;
-  let newSpectateData: SpectateData;
-
-  if (spectateData) {
-    newSpectateData = structuredClone(spectateData);
-  } else {
-    initialEvent = true;
-    newSpectateData = {
-      payloadSizes: undefined,
-      settings: undefined,
-      frames: [],
-      latestFinalizedFrame: undefined,
-      ending: undefined
-    };
-  }
-
   let offset = 0x00;
+  const gameEvents: GameEvent[] = [];
 
   while (offset < rawData.byteLength) {
-    // offset = parseEvent(rawData, offset, newSpectateData);
+    let newOffset: number, gameEvent: GameEvent | null;
 
-    // TODO: Understand replayVersion here
     // TODO: TS fixes for knowing command payload -> game start -> everything else
-    if (initialEvent) {
-      offset = parseInitialEvent(rawData, offset, newSpectateData);
-    } else {
-      offset = parseSubsequentEvent(rawData, offset, newSpectateData);
-    }
+    [newOffset, gameEvent] = parseEvent(rawData, offset, maybeSpectateData);
+    offset = newOffset;
+    if (gameEvent !== null) gameEvents.push(gameEvent);
   }
 
-  return newSpectateData;
-
+  return gameEvents;
 }
 
 // Ok we actually maybe don't want to return a frame here because a frame
@@ -74,158 +55,65 @@ export function parsePacket(rawPacket: Uint8Array, spectateData: SpectateData | 
 // higher level (something similar to but not equal parseFrame, or just the store).
 // parseEvent: (rawPacket, offset, replayVersion, frames, payloadSizes) -> [newOffset, frame]
 
-// Mutates spectateData
-function parseInitialEvent(
+// TODO: Instead, return an array of `UpdateEvent`s (or something better named)
+//   - contains the fields to update for each kind of update event
+//   - merge them into existing SpectateData with state update to allow
+//     SolidJS to be efficient about it
+//   - wrap the whole map merge state update operation in `batch`
+//   - key: get rid of the structuredClone call (clones many things that
+//     we don't actually need to touch)
+
+function parseEvent(
   rawData: DataView,
   offset: number,
-  spectateData: SpectateData
-): number {
-  const command = readUint(rawData, 8, '3.18.0.0', firstVersion, offset); // TODO: replayVersion
+  maybeSpectateData: SpectateData | undefined
+): [number, GameEvent | null] {
+
+  const replayVersion = maybeSpectateData?.settings.replayFormatVersion  ?? '3.18.0.0'; // TODO: replayVersion
+  // const payloadSizes = maybeSpectateData?.payloadSizes;
+  const payloadSizes = globalThis.payloadSizes;
+
+  const command = readUint(rawData, 8, replayVersion, firstVersion, offset);
+  let gameEvent: GameEvent | null = null;
   switch (command) {
     case 0x35:
       const commandPayloadSizes = parseEventPayloadsEvent(rawData, offset); // this offset will always be 0
-      spectateData.payloadSizes = commandPayloadSizes;
-      break;
+      globalThis.payloadSizes = commandPayloadSizes;
+      gameEvent = { type: "event_payloads", data: commandPayloadSizes };
+      return [offset + commandPayloadSizes[command] + 0x01, gameEvent];
     case 0x36:
       const gameSettings = parseGameStartEvent(rawData, offset, /* metadata */);
-      spectateData.settings = gameSettings;
+      gameEvent = { type: "game_start", data: gameSettings };
       break;
-    default:
-      console.log(`Unexpected command 0x${command.toString(16)}.`);
-  }
-
-  return offset + spectateData.payloadSizes[command] + 0x01;
-}
-
-// Mutates spectateData
-function parseSubsequentEvent(
-  rawData: DataView,
-  offset: number,
-  spectateData: SpectateData
-): number {
-  const replayVersion = spectateData.settings.replayFormatVersion;
-  const frames = spectateData.frames;
-  const payloadSizes = spectateData.payloadSizes;
-
-  const command = readUint(rawData, 8, replayVersion, firstVersion, offset);
-  switch (command) {
     case 0x37:
-      handlePreFrameUpdateEvent(rawData, offset, replayVersion, frames);
+      const playerInputs = parsePreFrameUpdateEvent(rawData, offset, replayVersion);
+      gameEvent = { type: "pre_frame_update", data: playerInputs };
       break;
     case 0x38:
-      handlePostFrameUpdateEvent(rawData, offset, replayVersion, frames);
+      const playerState = parsePostFrameUpdateEvent(rawData, offset, replayVersion);
+      gameEvent = { type: "post_frame_update", data: playerState }
       break;
     case 0x39:
       const gameEnding = parseGameEndEvent(rawData, offset, replayVersion);
-      spectateData.ending = gameEnding;
+      gameEvent = { type: "game_end", data: gameEnding };
       break;
     case 0x3a:
-      handleFrameStartEvent(rawData, offset, replayVersion, frames);
+      const frameStart = parseFrameStartEvent(
+        rawData,
+        offset,
+        replayVersion
+      );
+      gameEvent = { type: "frame_start", data: frameStart };
       break;
     case 0x3b:
-      handleItemUpdateEvent(rawData, offset, replayVersion, frames);
+      const itemUpdate = parseItemUpdateEvent(rawData, offset, replayVersion);
+      gameEvent = { type: "item_update", data: itemUpdate };
       break;
     default:
       console.log(`Doing nothing for command 0x${command.toString(16)}.`);
   }
 
-  return offset + payloadSizes[command] + 0x01;
-}
-
-function handlePreFrameUpdateEvent(
-  rawData: DataView,
-  offset: number,
-  replayVersion: string,
-  frames: Frame[]
-): void {
-  const playerInputs = parsePreFrameUpdateEvent(rawData, offset, replayVersion);
-  // Some older versions don't have the Frame Start Event so we have to
-  // potentially initialize the frame in both places.
-  initFrameIfNeeded(frames, playerInputs.frameNumber);
-  initPlayerIfNeeded(
-    frames,
-    playerInputs.frameNumber,
-    playerInputs.playerIndex
-  );
-  if (playerInputs.isNana) {
-    frames[playerInputs.frameNumber].players[
-      playerInputs.playerIndex
-      // @ts-ignore will only be readonly once parser is done
-    ].nanaInputs = playerInputs;
-  } else {
-    // @ts-ignore will only be readonly once parser is done
-    frames[playerInputs.frameNumber].players[playerInputs.playerIndex].inputs =
-      playerInputs;
-  }
-}
-
-function handlePostFrameUpdateEvent(
-  rawData: DataView,
-  offset: number,
-  replayVersion: string,
-  frames: Frame[]
-): void {
-  const playerState = parsePostFrameUpdateEvent(rawData, offset, replayVersion);
-  if (playerState.isNana) {
-    // @ts-ignore will only be readonly once parser is done
-    frames[playerState.frameNumber].players[playerState.playerIndex].nanaState =
-      playerState;
-  } else {
-    // @ts-ignore will only be readonly once parser is done
-    frames[playerState.frameNumber].players[playerState.playerIndex].state =
-      playerState;
-  }
-}
-
-function handleFrameStartEvent(
-  rawData: DataView,
-  offset: number,
-  replayVersion: string,
-  frames: Frame[]
-): void {
-  const { frameNumber, randomSeed } = parseFrameStartEvent(
-    rawData,
-    offset,
-    replayVersion
-  );
-  initFrameIfNeeded(frames, frameNumber);
-  // @ts-ignore will only be readonly once parser is done
-  frames[frameNumber].randomSeed = randomSeed;
-}
-
-function handleItemUpdateEvent(
-  rawData: DataView,
-  offset: number,
-  replayVersion: string,
-  frames: Frame[]
-): void {
-  const itemUpdate = parseItemUpdateEvent(rawData, offset, replayVersion);
-  frames[itemUpdate.frameNumber].items.push(itemUpdate);
-}
-
-function initFrameIfNeeded(frames: Frame[], frameNumber: number): void {
-  if (frames[frameNumber] === undefined) {
-    // @ts-expect-error: randomSeed will be populated later if found.
-    frames[frameNumber] = {
-      frameNumber: frameNumber,
-      players: [],
-      items: [],
-    };
-  }
-}
-
-function initPlayerIfNeeded(
-  frames: Frame[],
-  frameNumber: number,
-  playerIndex: number
-): void {
-  if (frames[frameNumber].players[playerIndex] === undefined) {
-    // @ts-expect-error: state and inputs will be populated later.
-    frames[frameNumber].players[playerIndex] = {
-      frameNumber: frameNumber,
-      playerIndex: playerIndex,
-    };
-  }
+  return [offset + payloadSizes![command] + 0x01, gameEvent];
 }
 
 function parseEventPayloadsEvent(

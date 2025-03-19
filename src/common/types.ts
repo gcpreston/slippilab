@@ -77,8 +77,39 @@ export interface CommandPayloadSizes {
  */
 export interface SpectateData extends PlaybackData {
   readonly payloadSizes: CommandPayloadSizes;
-  readonly latestFinalizedFrame?: number; // expects Slippi version >=3.7.0 due to this attribute
 }
+
+export type PreFrameUpdateEvent = PlayerInputs;
+export type PostFrameUpdateEvent = PlayerState;
+export type FrameStartEvent = { frameNumber: number, randomSeed: number };
+export type ItemUpdateEvent = ItemUpdate;
+export type GameEndEvent = GameEnding;
+export type EventPayloadsEvent = CommandPayloadSizes;
+export type GameStartEvent = GameSettings;
+
+export type GameEvent = {
+  type: "pre_frame_update",
+  data: PreFrameUpdateEvent
+} | {
+  type: "post_frame_update",
+  data: PostFrameUpdateEvent
+} | {
+  type: "frame_start",
+  data: FrameStartEvent
+} | {
+  type: "item_update",
+  data: ItemUpdate
+} | {
+  type: "game_end",
+  data: GameEndEvent
+} | {
+  type: "event_payloads",
+  data: EventPayloadsEvent
+} | {
+  type: "game_start",
+  data: GameStartEvent
+}
+
 export interface GameSettings {
   /**
    * The version of the .slp spec that was used when the file was created. Some

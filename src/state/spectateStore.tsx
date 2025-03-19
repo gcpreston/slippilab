@@ -19,8 +19,16 @@ import {
   SpectateData,
   RenderData,
   SpectateStore,
+  GameEvent,
+  PreFrameUpdateEvent,
+  FrameStartEvent,
+  PostFrameUpdateEvent,
+  GameEndEvent,
+  ItemUpdateEvent,
+  EventPayloadsEvent,
+  GameStartEvent,
+  CommandPayloadSizes,
 } from "~/common/types";
-import { parseReplay } from "~/parser/parser";
 import { queries } from "~/search/queries";
 import { Highlight, search } from "~/search/search";
 import { CharacterAnimations, fetchAnimations } from "~/viewer/animationCache";
@@ -47,7 +55,8 @@ export const defaultSpectateStoreState: SpectateStore = {
   isFullscreen: false,
   customAction: "Passive",
   customAttack: "Up Tilt",
-  packetBuffer: []
+
+  packetBuffer: [],
 };
 
 const [replayState, setReplayState] = createStore<SpectateStore>(
@@ -128,7 +137,6 @@ createEffect(() => {
 // TODO: Error handling
 
 export function connectWS(): WebSocket {
-  console.log('initializing ws connection');
   const WS_URL = 'ws://localhost:5197';
   const ws = new WebSocket(WS_URL);
 
@@ -146,6 +154,7 @@ export function connectWS(): WebSocket {
   };
 
   ws.onopen = () => {
+    console.log("Opened WebSocket to", WS_URL);
     setReplayState("ws", ws);
 
     createToast({
@@ -174,9 +183,12 @@ export function closeWS(): void {
   }
 }
 
+globalThis.payloadSizes = undefined;
+
 // Want this to run every time packetBuffer is updated.
 // And don't want it to run a second time before the first finishes.
 createEffect(() => {
+  // TODO: This could be some kind of forEach instead maybe
   if (replayState.packetBuffer.length > 0) {
     const data = replayState.packetBuffer[0];
     const bufferRest = replayState.packetBuffer.slice(1);
@@ -185,17 +197,156 @@ createEffect(() => {
     data.arrayBuffer()
       .then((buf) => {
         // console.log('game frame ArrayBuffer', buf);
-        // mutate frames
-        const newSpectateData = parsePacket(
+        const gameEvents = parsePacket(
           new Uint8Array(buf),
-          unwrap(replayState).playbackData
+          replayState.playbackData
         );
 
-        console.log("setting new playbackData", newSpectateData);
-        setReplayState({ playbackData: newSpectateData });
+        batch(() => {
+          gameEvents.forEach((gameEvent) => {
+            setReplayStateFromGameEvent(gameEvent)
+          });
+        });
       });
   }
 });
+
+function setReplayStateFromGameEvent(gameEvent: GameEvent): void {
+  switch (gameEvent.type) {
+    case "event_payloads":
+      handleEventPayloadsEvent(gameEvent.data);
+      break;
+    case "game_start":
+      handleGameStartEvent(gameEvent.data);
+      break;
+    case "pre_frame_update":
+      handlePreFrameUpdateEvent(gameEvent.data);
+      break;
+    case "post_frame_update":
+      handlePostFrameUpdateEvent(gameEvent.data);
+      break;
+    case "game_end":
+      handleGameEndEvent(gameEvent.data);
+      break;
+    case "frame_start":
+      handleFrameStartEvent(gameEvent.data);
+      break;
+    case "item_update":
+      handleItemUpdateEvent(gameEvent.data);
+      break;
+  }
+}
+
+function handleEventPayloadsEvent(payloadSizes: EventPayloadsEvent) {
+  const playbackData: SpectateData = {
+    settings: undefined,
+    payloadSizes,
+    frames: [],
+    ending: undefined
+  }
+  setReplayState("playbackData", playbackData);
+}
+
+function handleGameStartEvent(settings: GameStartEvent) {
+  setReplayState("playbackData", { ...replayState.playbackData!, settings });
+}
+
+function initFrameIfNeeded(frames: Frame[], frameNumber: number): Frame {
+  if (frames[frameNumber] === undefined) {
+    // @ts-expect-error: randomSeed will be populated later if found.
+    return {
+      frameNumber: frameNumber,
+      players: [],
+      items: [],
+    };
+  } else {
+    return frames[frameNumber];
+  }
+}
+
+function initPlayerIfNeeded(
+  frame: Frame,
+  playerIndex: number
+): Frame {
+  if (frame.players[playerIndex] !== undefined) return frame;
+
+  const players = frame.players.slice();
+  // @ts-expect-error: state and inputs will be populated later.
+  players[playerIndex] = {
+    frameNumber: frame.frameNumber,
+    playerIndex: playerIndex,
+  };
+  return { ...frame, players };
+}
+
+function handlePreFrameUpdateEvent(playerInputs: PreFrameUpdateEvent): void {
+  // Some older versions don't have the Frame Start Event so we have to
+  // potentially initialize the frame in both places.
+  let frame = initFrameIfNeeded(replayState.playbackData!.frames, playerInputs.frameNumber);
+  frame = initPlayerIfNeeded(
+    frame,
+    playerInputs.playerIndex
+  );
+  if (playerInputs.isNana) {
+    const players = frame.players.slice();
+    const player: PlayerUpdate = { ...frame.players[playerInputs.playerIndex], nanaInputs: playerInputs };
+    players[player.playerIndex] = player;
+    frame = { ...frame, players };
+    const frames = replayState.playbackData!.frames.slice();
+    frames[playerInputs.frameNumber] = frame;
+    setReplayState("playbackData", { ...replayState.playbackData!, frames });
+  } else {
+    const players = frame.players.slice();
+    const player: PlayerUpdate = { ...frame.players[playerInputs.playerIndex], inputs: playerInputs };
+    players[player.playerIndex] = player;
+    frame = { ...frame, players };
+    const frames = replayState.playbackData!.frames.slice();
+    frames[playerInputs.frameNumber] = frame;
+    setReplayState("playbackData", { ...replayState.playbackData!, frames });
+  }
+}
+
+function handlePostFrameUpdateEvent(playerState: PostFrameUpdateEvent): void {
+  const frame = replayState.playbackData!.frames[playerState.frameNumber];
+  if (playerState.isNana) {
+    const players = frame.players.slice();
+    const player: PlayerUpdate = { ...players[playerState.playerIndex], nanaState: playerState };
+    players[player.playerIndex] = player;
+
+    const frames = replayState.playbackData!.frames.slice();
+    frames[playerState.frameNumber] = { ...frame, players };
+    setReplayState("playbackData", { ...replayState.playbackData!, frames });
+  } else {
+    const players = frame.players.slice();
+    const player: PlayerUpdate = { ...players[playerState.playerIndex], state: playerState };
+    players[player.playerIndex] = player;
+
+    const frames = replayState.playbackData!.frames.slice();
+    frames[playerState.frameNumber] = { ...frame, players };
+    setReplayState("playbackData", { ...replayState.playbackData!, frames });
+  }
+}
+
+function handleGameEndEvent(gameEnding: GameEndEvent) {
+  setReplayState("playbackData", { ...replayState.playbackData!, ending: gameEnding });
+}
+
+function handleFrameStartEvent(frameStart: FrameStartEvent): void {
+  const { frameNumber, randomSeed } = frameStart;
+  const frame = initFrameIfNeeded(replayState.playbackData!.frames, frameNumber);
+  // @ts-ignore not sure what to do about this
+  frame.randomSeed = randomSeed;
+  const frames = replayState.playbackData!.frames.slice();
+  frames[frame.frameNumber] = frame;
+  setReplayState("playbackData", { ...replayState.playbackData!, frames });
+}
+
+
+function handleItemUpdateEvent(itemUpdate: ItemUpdateEvent): void {
+  const frames = replayState.playbackData!.frames.slice();
+  frames[itemUpdate.frameNumber].items.push(itemUpdate);
+  setReplayState("playbackData", { ...replayState.playbackData!, frames });
+}
 
 // TODO: Keep frames as unfinalized ones
 // Will need to have frames as hash table from frame number -> frame
@@ -228,6 +379,10 @@ for (let playerIndex = 0; playerIndex < 4; playerIndex++) {
         const replay = replayState.playbackData;
         if (replay === undefined) {
           return undefined;
+        }
+        // TODO: Remove this one when the code isn't awful lol
+        if (replay.settings === undefined) {
+          return undefined
         }
         const playerSettings = replay.settings.playerSettings[playerIndex];
         if (playerSettings === undefined) {

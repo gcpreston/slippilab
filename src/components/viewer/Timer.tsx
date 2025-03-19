@@ -68,7 +68,7 @@ export function Timer() {
     const store = playbackStore();
     const frames =
       store.playbackData!.settings.timerStart * 60 -
-      store.frame! +
+      store.frame +
       123;
     const minutes = Math.floor(frames / (60 * 60))
       .toString()
