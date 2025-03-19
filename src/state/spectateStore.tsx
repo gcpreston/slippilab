@@ -341,10 +341,14 @@ function handleFrameStartEvent(frameStart: FrameStartEvent): void {
   setReplayState("playbackData", { ...replayState.playbackData!, frames });
 }
 
-
 function handleItemUpdateEvent(itemUpdate: ItemUpdateEvent): void {
   const frames = replayState.playbackData!.frames.slice();
-  frames[itemUpdate.frameNumber].items.push(itemUpdate);
+  let frame = frames[itemUpdate.frameNumber];
+  const items = frame.items.slice();
+  items.push(itemUpdate);
+  frame = { ...frame, items };
+  frames[itemUpdate.frameNumber] = frame;
+  console.log('handling item update, items:', frames[itemUpdate.frameNumber]);
   setReplayState("playbackData", { ...replayState.playbackData!, frames });
 }
 
