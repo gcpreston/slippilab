@@ -1,18 +1,14 @@
 import createRAF, { targetFPS } from "@solid-primitives/raf";
-import { batch, createEffect, createResource } from "solid-js";
+import { batch, createEffect, createResource, createRoot } from "solid-js";
 import { createStore, unwrap } from "solid-js/store";
-import { createToast, dismissToast } from "~/components/common/toaster";
+import { createToast } from "~/components/common/toaster";
 import {
-  ActionName,
   actionNameById,
-  AttackName,
   characterNameByExternalId,
   characterNameByInternalId,
 } from "~/common/ids";
 import {
   Frame,
-  PlayerInputs,
-  PlayerSettings,
   PlayerState,
   PlayerUpdate,
   PlayerUpdateWithNana,
@@ -30,14 +26,10 @@ import {
   CommandPayloadSizes,
 } from "~/common/types";
 import { queries } from "~/search/queries";
-import { Highlight, search } from "~/search/search";
 import { CharacterAnimations, fetchAnimations } from "~/viewer/animationCache";
 import { actionMapByInternalId } from "~/viewer/characters";
-import { Character } from "~/viewer/characters/character";
 import { getPlayerOnFrame, getStartOfAction } from "~/viewer/viewerUtil";
 import colors from "tailwindcss/colors";
-import { action, landsAttack } from "~/search/framePredicates";
-import { decode } from "@shelacek/ubjson";
 import { parsePacket } from "~/parser/liveParser";
 
 export const defaultSpectateStoreState: SpectateStore = {
@@ -118,15 +110,6 @@ const [running, start, stop] = createRAF(
 createEffect(() => setReplayState("running", running()));
 */
 
-// runs based on frames changes rn
-// probably want to change that
-createEffect(() => {
-  if ((replayState.playbackData?.frames.length || 0) > 0) {
-    const frameCount = replayState.playbackData!.frames.length;
-    setReplayState("frame", frameCount - 1);
-  }
-});
-
 // on initial load: connect to websocket, define callbacks
 //   - initialize empty SpectateStore
 //   - expect first packets first
@@ -188,32 +171,6 @@ declare global {
 }
 
 globalThis.payloadSizes = undefined;
-
-// Want this to run every time packetBuffer is updated.
-// And don't want it to run a second time before the first finishes.
-createEffect(() => {
-  // TODO: This could be some kind of forEach instead maybe
-  if (replayState.packetBuffer.length > 0) {
-    const data = replayState.packetBuffer[0];
-    const bufferRest = replayState.packetBuffer.slice(1);
-    setReplayState("packetBuffer", bufferRest);
-
-    data.arrayBuffer()
-      .then((buf) => {
-        // console.log('game frame ArrayBuffer', buf);
-        const gameEvents = parsePacket(
-          new Uint8Array(buf),
-          replayState.playbackData
-        );
-
-        batch(() => {
-          gameEvents.forEach((gameEvent) => {
-            setReplayStateFromGameEvent(gameEvent)
-          });
-        });
-      });
-  }
-});
 
 function setReplayStateFromGameEvent(gameEvent: GameEvent): void {
   switch (gameEvent.type) {
@@ -355,110 +312,121 @@ function handleItemUpdateEvent(itemUpdate: ItemUpdateEvent): void {
   setReplayState("playbackData", { ...replayState.playbackData!, frames });
 }
 
-// TODO: Keep frames as unfinalized ones
-// Will need to have frames as hash table from frame number -> frame
-/*
-createEffect(() => {
-  const latestFinalizedFrame = replayState.playbackData?.latestFinalizedFrame;
-
-  if (latestFinalizedFrame) {
-    const firstNonFinalizedFrameIndex = replayState.playbackData!.frames.findIndex(frame => frame.frameNumber > latestFinalizedFrame);
-
-    if (firstNonFinalizedFrameIndex) {
-      const unfinalizedFrames = replayState.playbackData!.frames.slice(firstNonFinalizedFrameIndex);
-      const newSpectateData = {
-        ...spectateStore.playbackData!,
-        frames: unfinalizedFrames
-      };
-      setReplayState("playbackData", newSpectateData);
+createRoot(() => {
+  // runs based on frames changes rn
+  // probably want to change that
+  createEffect(() => {
+    if ((replayState.playbackData?.frames.length || 0) > 0) {
+      const frameCount = replayState.playbackData!.frames.length;
+      setReplayState("frame", frameCount - 1);
     }
-  }
-});
-*/
+  });
 
-// -------------------------
+  createEffect(() => {
+    // TODO: This could be some kind of forEach instead maybe
+    if (replayState.packetBuffer.length > 0) {
+      const data = replayState.packetBuffer[0];
+      const bufferRest = replayState.packetBuffer.slice(1);
+      setReplayState("packetBuffer", bufferRest);
 
-const animationResources = [];
-for (let playerIndex = 0; playerIndex < 4; playerIndex++) {
-  animationResources.push(
-    createResource(
-      () => {
-        const replay = replayState.playbackData;
-        if (replay === undefined) {
-          return undefined;
-        }
-        // TODO: Remove this one when the code isn't awful lol
-        if (replay.settings === undefined) {
-          return undefined
-        }
-        const playerSettings = replay.settings.playerSettings[playerIndex];
-        if (playerSettings === undefined) {
-          return undefined;
-        }
-        if (replay.frames[replayState.frame] === undefined) {
-          return undefined;
-        }
+      data.arrayBuffer()
+        .then((buf) => {
+          const gameEvents = parsePacket(
+            new Uint8Array(buf),
+            replayState.playbackData
+          );
 
-        const playerUpdate =
-          replay.frames[replayState.frame].players[playerIndex];
-        if (playerUpdate === undefined) {
+          batch(() => {
+            gameEvents.forEach((gameEvent) => {
+              setReplayStateFromGameEvent(gameEvent)
+            });
+          });
+        });
+    }
+  });
+
+  const animationResources = [];
+  for (let playerIndex = 0; playerIndex < 4; playerIndex++) {
+    animationResources.push(
+      createResource(
+        () => {
+          const replay = replayState.playbackData;
+          if (replay === undefined) {
+            return undefined;
+          }
+          // TODO: Remove this one when the code isn't awful lol
+          if (replay.settings === undefined) {
+            return undefined
+          }
+          const playerSettings = replay.settings.playerSettings[playerIndex];
+          if (playerSettings === undefined) {
+            return undefined;
+          }
+          if (replay.frames[replayState.frame] === undefined) {
+            return undefined;
+          }
+
+          const playerUpdate =
+            replay.frames[replayState.frame].players[playerIndex];
+          if (playerUpdate === undefined) {
+            return playerSettings.externalCharacterId;
+          }
+          if (
+            playerUpdate.state.internalCharacterId ===
+            characterNameByInternalId.indexOf("Zelda")
+          ) {
+            return characterNameByExternalId.indexOf("Zelda");
+          }
+          if (
+            playerUpdate.state.internalCharacterId ===
+            characterNameByInternalId.indexOf("Sheik")
+          ) {
+            return characterNameByExternalId.indexOf("Sheik");
+          }
           return playerSettings.externalCharacterId;
-        }
-        if (
-          playerUpdate.state.internalCharacterId ===
-          characterNameByInternalId.indexOf("Zelda")
-        ) {
-          return characterNameByExternalId.indexOf("Zelda");
-        }
-        if (
-          playerUpdate.state.internalCharacterId ===
-          characterNameByInternalId.indexOf("Sheik")
-        ) {
-          return characterNameByExternalId.indexOf("Sheik");
-        }
-        return playerSettings.externalCharacterId;
-      },
-      (id) => (id === undefined ? undefined : fetchAnimations(id))
+        },
+        (id) => (id === undefined ? undefined : fetchAnimations(id))
+      )
+    );
+  }
+  animationResources.forEach(([dataSignal], playerIndex) =>
+    createEffect(() =>
+      // I can't use the obvious setReplayState("animations", playerIndex,
+      // dataSignal()) because it will merge into the previous animations data
+      // object, essentially overwriting the previous characters animation data
+      // forever
+      setReplayState("animations", (animations) => {
+        const newAnimations = [...animations];
+        newAnimations[playerIndex] = dataSignal();
+        return newAnimations;
+      })
     )
   );
-}
-animationResources.forEach(([dataSignal], playerIndex) =>
-  createEffect(() =>
-    // I can't use the obvious setReplayState("animations", playerIndex,
-    // dataSignal()) because it will merge into the previous animations data
-    // object, essentially overwriting the previous characters animation data
-    // forever
-    setReplayState("animations", (animations) => {
-      const newAnimations = [...animations];
-      newAnimations[playerIndex] = dataSignal();
-      return newAnimations;
-    })
-  )
-);
 
-createEffect(() => {
-  if (replayState.playbackData === undefined) {
-    return;
-  }
-  setReplayState(
-    "renderDatas",
-    replayState.playbackData.frames.length <= replayState.frame ? [] : replayState.playbackData.frames[replayState.frame].players
-      .filter((playerUpdate) => playerUpdate)
-      .flatMap((playerUpdate) => {
-        const animations = replayState.animations[playerUpdate.playerIndex];
-        if (animations === undefined) return [];
-        const renderDatas = [];
-        renderDatas.push(
-          computeRenderData(replayState, playerUpdate, animations, false)
-        );
-        if (playerUpdate.nanaState != null) {
+  createEffect(() => {
+    if (replayState.playbackData === undefined) {
+      return;
+    }
+    setReplayState(
+      "renderDatas",
+      replayState.playbackData.frames.length <= replayState.frame ? [] : replayState.playbackData.frames[replayState.frame].players
+        .filter((playerUpdate) => playerUpdate)
+        .flatMap((playerUpdate) => {
+          const animations = replayState.animations[playerUpdate.playerIndex];
+          if (animations === undefined) return [];
+          const renderDatas = [];
           renderDatas.push(
-            computeRenderData(replayState, playerUpdate, animations, true)
+            computeRenderData(replayState, playerUpdate, animations, false)
           );
-        }
-        return renderDatas;
-      })
-  );
+          if (playerUpdate.nanaState != null) {
+            renderDatas.push(
+              computeRenderData(replayState, playerUpdate, animations, true)
+            );
+          }
+          return renderDatas;
+        })
+    );
+  });
 });
 
 function computeRenderData(
