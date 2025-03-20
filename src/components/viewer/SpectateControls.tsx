@@ -177,11 +177,18 @@ export function SpectateControls() {
           +
         </PlusIcon>
         <div
+          class={`material-icons cursor-pointer text-[32px] ${/* spectateStore.livePlayback */ false ? 'invisible' : 'visible'}`}
+          onClick={() => adjust(120)}
+          aria-label="Skip ahead 2 seconds"
+        >
+          update
+        </div>
+        <div
           class="material-icons cursor-pointer text-[32px]"
           onClick={() => jumpToLive()}
           aria-label="Jump to live"
         >
-          update
+          live_tv
         </div>
       </div>
       <input

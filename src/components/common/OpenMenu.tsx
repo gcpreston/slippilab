@@ -10,6 +10,7 @@ import { AddFolderIcon } from "~/components/common/icons";
 import { setSidebar } from "~/state/navigationStore";
 import { connectWS } from "~/state/spectateStore";
 import { setPlaybackType } from "~/state/playback";
+import { currentSelectionStore } from "~/state/selectionStore";
 
 export function OpenMenu(props: { name?: string }) {
   const [menuState, menuSend] = useMachine(
@@ -32,6 +33,7 @@ export function OpenMenu(props: { name?: string }) {
             break;
           case "live":
             setPlaybackType("spectate");
+            currentSelectionStore().clearSelection();
             connectWS();
             break;
         }

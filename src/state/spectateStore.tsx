@@ -47,7 +47,6 @@ export const defaultSpectateStoreState: SpectateStore = {
   customAction: "Passive",
   customAttack: "Up Tilt",
 
-  livePlayback: true,
   packetBuffer: [],
 };
 
@@ -91,11 +90,10 @@ export function toggleFullscreen(): void {
 }
 
 export function togglePause(): void {
-  replayState.running ? pause() : start();
+  running() ? pause() : start();
 }
 
 export function pause(): void {
-  setReplayState("livePlayback", false);
   stop();
 }
 
@@ -112,25 +110,28 @@ export function jumpPercent(percent: number): void {
 }
 
 export function jumpToLive(): void {
-  setReplayState("livePlayback", true);
+  setReplayState("frame", replayState.playbackData!.frames.length - 2);
 }
 
 export function adjust(delta: number): void {
-  setReplayState("frame", (f) => wrapFrame(replayState, f + delta));
+  // TODO: Computed frame count signal
+  setReplayState("frame", (f) =>
+    Math.min(f + delta, replayState.playbackData!.frames.length - 1));
 }
 
 // TODO: Figure out how to put this in createRoot
 const [running, start, stop] = createRAF(
   targetFPS(
     () => {
-      if (!replayState.livePlayback) {
-        setReplayState("frame", (f) => f + replayState.framesPerTick)
+      const tryFrame = replayState.frame + replayState.framesPerTick;
+      if (tryFrame < replayState.playbackData!.frames.length - 1) {
+        setReplayState("frame", tryFrame);
       }
     },
     () => replayState.fps
   )
 );
-createEffect(() => setReplayState("running", replayState.livePlayback || running()));
+createEffect(() => setReplayState("running", running()));
 
 // on initial load: connect to websocket, define callbacks
 //   - initialize empty SpectateStore
@@ -233,6 +234,7 @@ function handleEventPayloadsEvent() {
 
 function handleGameStartEvent(settings: GameStartEvent) {
   setReplayState("playbackData", { ...replayState.playbackData!, settings });
+  start();
 }
 
 function initFrameIfNeeded(frames: Frame[], frameNumber: number): Frame {
@@ -336,15 +338,6 @@ function handleItemUpdateEvent(itemUpdate: ItemUpdateEvent): void {
 }
 
 createRoot(() => {
-  // runs based on frames changes rn
-  // probably want to change that
-  createEffect(() => {
-    if (replayState.livePlayback && (replayState.playbackData?.frames.length || 0) > 0) {
-      const frameCount = replayState.playbackData!.frames.length;
-      setReplayState("frame", frameCount - 1);
-    }
-  });
-
   createEffect(() => {
     // TODO: This could be some kind of forEach instead maybe
     if (replayState.packetBuffer.length > 0) {
