@@ -78,7 +78,7 @@ function parseEvent(
     case 0x35:
       const commandPayloadSizes = parseEventPayloadsEvent(rawData, offset); // this offset will always be 0
       globalThis.payloadSizes = commandPayloadSizes;
-      gameEvent = { type: "event_payloads", data: commandPayloadSizes };
+      gameEvent = { type: "event_payloads", data: null };
       return [offset + commandPayloadSizes[command] + 0x01, gameEvent];
     case 0x36:
       const gameSettings = parseGameStartEvent(rawData, offset, /* metadata */);

@@ -21,7 +21,6 @@ import {
   PostFrameUpdateEvent,
   GameEndEvent,
   ItemUpdateEvent,
-  EventPayloadsEvent,
   GameStartEvent,
   CommandPayloadSizes,
 } from "~/common/types";
@@ -48,6 +47,7 @@ export const defaultSpectateStoreState: SpectateStore = {
   customAction: "Passive",
   customAttack: "Up Tilt",
 
+  livePlayback: true,
   packetBuffer: [],
 };
 
@@ -90,25 +90,47 @@ export function toggleFullscreen(): void {
   setReplayState("isFullscreen", (isFullscreen) => !isFullscreen);
 }
 
-// Controls removed
+export function togglePause(): void {
+  replayState.running ? pause() : start();
+}
 
-/* IDEA
- * Due to network, frames will not arrive perfectly on time.
- * Create a buffer that we pop from at this rate.
- * For first pass, maybe just display frame as soon as it's in and parsed.
- */
-/*
+export function pause(): void {
+  setReplayState("livePlayback", false);
+  stop();
+}
+
+export function jump(target: number): void {
+  setReplayState("frame", wrapFrame(replayState, target));
+}
+
+// percent is [0,1]
+export function jumpPercent(percent: number): void {
+  setReplayState(
+    "frame",
+    Math.round((replayState.playbackData?.frames.length ?? 0) * percent)
+  );
+}
+
+export function jumpToLive(): void {
+  setReplayState("livePlayback", true);
+}
+
+export function adjust(delta: number): void {
+  setReplayState("frame", (f) => wrapFrame(replayState, f + delta));
+}
+
+// TODO: Figure out how to put this in createRoot
 const [running, start, stop] = createRAF(
   targetFPS(
-    () =>
-      setReplayState("frame", (f) =>
-        wrapFrame(replayState, f + replayState.framesPerTick)
-      ),
+    () => {
+      if (!replayState.livePlayback) {
+        setReplayState("frame", (f) => f + replayState.framesPerTick)
+      }
+    },
     () => replayState.fps
   )
 );
-createEffect(() => setReplayState("running", running()));
-*/
+createEffect(() => setReplayState("running", replayState.livePlayback || running()));
 
 // on initial load: connect to websocket, define callbacks
 //   - initialize empty SpectateStore
@@ -150,6 +172,7 @@ export function connectWS(): WebSocket {
     });
   };
 
+  // TODO: Move to createRoot
   createEffect(() => {
     ws.onmessage = ({ data }: { data: Blob }) => {
       setReplayState("packetBuffer", [...replayState.packetBuffer, data]);
@@ -175,7 +198,7 @@ globalThis.payloadSizes = undefined;
 function setReplayStateFromGameEvent(gameEvent: GameEvent): void {
   switch (gameEvent.type) {
     case "event_payloads":
-      handleEventPayloadsEvent(gameEvent.data);
+      handleEventPayloadsEvent();
       break;
     case "game_start":
       handleGameStartEvent(gameEvent.data);
@@ -198,7 +221,7 @@ function setReplayStateFromGameEvent(gameEvent: GameEvent): void {
   }
 }
 
-function handleEventPayloadsEvent(payloadSizes: EventPayloadsEvent) {
+function handleEventPayloadsEvent() {
   const initialPlaybackData: SpectateData = {
     // @ts-expect-error: settings will be populated on game start
     settings: undefined,
@@ -316,7 +339,7 @@ createRoot(() => {
   // runs based on frames changes rn
   // probably want to change that
   createEffect(() => {
-    if ((replayState.playbackData?.frames.length || 0) > 0) {
+    if (replayState.livePlayback && (replayState.playbackData?.frames.length || 0) > 0) {
       const frameCount = replayState.playbackData!.frames.length;
       setReplayState("frame", frameCount - 1);
     }

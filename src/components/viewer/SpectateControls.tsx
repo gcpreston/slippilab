@@ -1,13 +1,13 @@
 import { onCleanup, onMount, Show } from "solid-js";
 import { MinusIcon, PlusIcon } from "~/components/common/icons";
 import {
-  replayStore,
+  spectateStore,
   adjust,
   jump,
   jumpPercent,
-  nextHighlight,
+  // nextHighlight,
   pause,
-  previousHighlight,
+  // previousHighlight,
   speedFast,
   speedNormal,
   speedSlow,
@@ -16,10 +16,11 @@ import {
   togglePause,
   zoomIn,
   zoomOut,
-} from "~/state/replayStore";
+  jumpToLive,
+} from "~/state/spectateStore";
 import { currentSelectionStore } from "~/state/selectionStore";
 
-export function Controls() {
+export function SpectateControls() {
   onMount(() => {
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -90,14 +91,14 @@ export function Controls() {
       case "{":
         void currentSelectionStore().previousFile();
         break;
-      case "'":
-      case '"':
-        nextHighlight();
-        break;
-      case ";":
-      case ":":
-        previousHighlight();
-        break;
+      // case "'":
+      // case '"':
+      //   nextHighlight();
+      //   break;
+      // case ";":
+      // case ":":
+      //   previousHighlight();
+      //   break;
       case "d":
       case "D":
         toggleDebug();
@@ -123,7 +124,7 @@ export function Controls() {
   return (
     <div class="flex flex-wrap items-center justify-evenly gap-4 rounded-b border border-t-0 py-1 px-2 text-slate-800">
       <Show
-        when={replayStore.running}
+        when={spectateStore.running}
         fallback={
           <div
             class="material-icons cursor-pointer text-[32px] leading-none"
@@ -162,7 +163,7 @@ export function Controls() {
           -
         </MinusIcon>
         <label for="seekbar" class="font-mono text-sm">
-          {replayStore.isDebug ? replayStore.frame - 123 : replayStore.frame}
+          {spectateStore.isDebug ? spectateStore.frame - 123 : spectateStore.frame}
         </label>
         <PlusIcon
           class="h-6 w-6"
@@ -177,8 +178,8 @@ export function Controls() {
         </PlusIcon>
         <div
           class="material-icons cursor-pointer text-[32px]"
-          onClick={() => adjust(120)}
-          aria-label="Skip ahead 2 seconds"
+          onClick={() => jumpToLive()}
+          aria-label="Jump to live"
         >
           update
         </div>
@@ -188,8 +189,8 @@ export function Controls() {
         class="flex-grow accent-slippi-500"
         type="range"
         ref={seekbarInput}
-        value={replayStore.frame}
-        max={replayStore.playbackData!.frames.length - 1}
+        value={spectateStore.frame}
+        max={spectateStore.playbackData!.frames.length - 1}
         onInput={() => jump(seekbarInput.valueAsNumber)}
       />
       <div
@@ -197,7 +198,7 @@ export function Controls() {
         onClick={() => toggleFullscreen()}
         aria-label="Toggle fullscreen mode"
       >
-        {replayStore.isFullscreen ? "fullscreen_exit" : "fullscreen"}
+        {spectateStore.isFullscreen ? "fullscreen_exit" : "fullscreen"}
       </div>
     </div>
   );

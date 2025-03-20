@@ -42,9 +42,7 @@ export type ReplayStore = PlaybackStore & {
 
 export type SpectateStore = PlaybackStore & {
   playbackData?: SpectateData;
-  // IDEA
-  // - Here, hold frames which have not yet been played + unfinalized ones
-  // - on state update, play the first one
+  livePlayback: boolean;
   packetBuffer: Blob[];
   ws?: WebSocket;
 };
@@ -83,7 +81,6 @@ export type PostFrameUpdateEvent = PlayerState;
 export type FrameStartEvent = { frameNumber: number, randomSeed: number };
 export type ItemUpdateEvent = ItemUpdate;
 export type GameEndEvent = GameEnding;
-export type EventPayloadsEvent = CommandPayloadSizes;
 export type GameStartEvent = GameSettings;
 
 export type GameEvent = {
@@ -103,7 +100,7 @@ export type GameEvent = {
   data: GameEndEvent
 } | {
   type: "event_payloads",
-  data: EventPayloadsEvent
+  data: null
 } | {
   type: "game_start",
   data: GameStartEvent
