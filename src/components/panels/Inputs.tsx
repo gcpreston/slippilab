@@ -5,7 +5,8 @@ import {
   characterNameByInternalId,
 } from "~/common/ids";
 import { PlayerInputs } from "~/common/types";
-import { getPlayerColor, replayStore } from "~/state/replayStore";
+import { playbackStore } from "~/state/playback";
+import { getPlayerColor } from "~/common/util";
 
 export function Inputs() {
   const indexes = [0, 1, 2, 3];
@@ -25,10 +26,10 @@ export function Inputs() {
 
 function Summary(props: { playerIndex: number }) {
   const settings = createMemo(
-    () => replayStore.playbackData?.settings.playerSettings[props.playerIndex]
+    () => playbackStore().playbackData?.settings.playerSettings[props.playerIndex]
   );
   const renderData = createMemo(() => {
-    return replayStore.renderDatas.find(
+    return playbackStore().renderDatas.find(
       (renderData) =>
         renderData.playerInputs.playerIndex === props.playerIndex &&
         !renderData.playerState.isNana
@@ -78,10 +79,10 @@ function Controller(
   props: { playerIndex: number } & JSX.HTMLAttributes<SVGSVGElement>
 ) {
   const settings = createMemo(
-    () => replayStore.playbackData?.settings.playerSettings[props.playerIndex]
+    () => playbackStore().playbackData?.settings.playerSettings[props.playerIndex]
   );
   const inputs = createMemo(() => {
-    return replayStore.renderDatas.find(
+    return playbackStore().renderDatas.find(
       (renderData) =>
         renderData.playerInputs.playerIndex === props.playerIndex &&
         !renderData.playerState.isNana
@@ -96,7 +97,7 @@ function Controller(
       >
         <path
           id="shell"
-          fill={getPlayerColor(replayStore, props.playerIndex, false)}
+          fill={getPlayerColor(playbackStore(), props.playerIndex, false)}
           d="M376.4 33.6c-6 0-11.9 3.9-11.1 11.8 1 11.8-2.6 21.8-12.6 28.8-10 7.2-24.4 4.3-35.2 10.2a53.6 53.6 0 0 0-28.1 40.6c-116.9 1.6-160.5 25.4-160.5 25.4-68.1-13.9-77.4 34-77.4 34-67.5 45-47.9 128.2-47.9 128.2-7 84.3-9.5 239.6 46.8 239.6s56-145.5 56-145.5 9.8 16.2 17.3 37.6c7.5 21.3 63.5 79.7 124.1 15.6 60.7-64.1-23-128.2-23-128.2v-10.2c20.2-5.6 68-6.6 68-6.6s48 1 68.2 6.6v10.2s-83.7 64-23 128.2c60.6 64 116.6 5.7 124-15.6 7.6-21.4 17.4-37.6 17.4-37.6s-.3 145.5 56 145.5 53.7-155.3 46.8-239.6c0 0 19.6-83.1-48-128.2 0 0-9.2-47.9-77.3-34 0 0-39.3-21.4-143-25 5-25.9 37.2-20 54.9-32.7a52.6 52.6 0 0 0 21-47.3c-.8-7.8-7.2-11.8-13.4-11.8z"
         />
         <path

@@ -1,6 +1,6 @@
 import { createMemo, createSignal } from "solid-js";
-import { replayStore } from "./replayStore";
-import { spectateStore } from "./spectateStore";
+import { replayStore } from "~/state/replayStore";
+import { spectateStore } from "~/state/spectateStore";
 
 export type PlaybackType = "replay" | "spectate";
 export const [playbackType, setPlaybackType] = createSignal<PlaybackType>("replay");

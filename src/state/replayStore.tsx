@@ -23,9 +23,9 @@ import { currentSelectionStore } from "~/state/selectionStore";
 import { CharacterAnimations, fetchAnimations } from "~/viewer/animationCache";
 import { actionMapByInternalId } from "~/viewer/characters";
 import { getPlayerOnFrame, getStartOfAction } from "~/viewer/viewerUtil";
-import colors from "tailwindcss/colors";
 import { fileStore } from "~/state/fileStore";
 import { action, landsAttack } from "~/search/framePredicates";
+import { getPlayerColor } from "~/common/util";
 import { decode } from "@shelacek/ubjson";
 
 export const defaultReplayStoreState: ReplayStore = {
@@ -460,28 +460,6 @@ function isSpacieUpB(playerState: PlayerState): boolean {
     ["Fox", "Falco"].includes(character) &&
     [355, 356].includes(playerState.actionStateId)
   );
-}
-
-export function getPlayerColor(
-  replayState: ReplayStore,
-  playerIndex: number,
-  isNana: boolean
-): string {
-  if (replayState.playbackData!.settings.isTeams) {
-    const settings =
-      replayState.playbackData!.settings.playerSettings[playerIndex];
-    return [
-      [colors.red["800"], colors.red["600"]],
-      [colors.green["800"], colors.green["600"]],
-      [colors.blue["800"], colors.blue["600"]],
-    ][settings.teamId][isNana ? 1 : settings.teamShade];
-  }
-  return [
-    [colors.red["700"], colors.red["600"]],
-    [colors.blue["700"], colors.blue["600"]],
-    [colors.yellow["500"], colors.yellow["400"]],
-    [colors.green["700"], colors.green["600"]],
-  ][playerIndex][isNana ? 1 : 0];
 }
 
 function wrapFrame(replayState: ReplayStore, frame: number): number {

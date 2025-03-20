@@ -28,7 +28,7 @@ import { queries } from "~/search/queries";
 import { CharacterAnimations, fetchAnimations } from "~/viewer/animationCache";
 import { actionMapByInternalId } from "~/viewer/characters";
 import { getPlayerOnFrame, getStartOfAction } from "~/viewer/viewerUtil";
-import colors from "tailwindcss/colors";
+import { getPlayerColor } from "~/common/util";
 import { parsePacket } from "~/parser/liveParser";
 
 export const defaultSpectateStoreState: SpectateStore = {
@@ -612,28 +612,6 @@ function isSpacieUpB(playerState: PlayerState): boolean {
     ["Fox", "Falco"].includes(character) &&
     [355, 356].includes(playerState.actionStateId)
   );
-}
-
-export function getPlayerColor(
-  replayState: SpectateStore,
-  playerIndex: number,
-  isNana: boolean
-): string {
-  if (replayState.playbackData!.settings.isTeams) {
-    const settings =
-      replayState.playbackData!.settings.playerSettings[playerIndex];
-    return [
-      [colors.red["800"], colors.red["600"]],
-      [colors.green["800"], colors.green["600"]],
-      [colors.blue["800"], colors.blue["600"]],
-    ][settings.teamId][isNana ? 1 : settings.teamShade];
-  }
-  return [
-    [colors.red["700"], colors.red["600"]],
-    [colors.blue["700"], colors.blue["600"]],
-    [colors.yellow["500"], colors.yellow["400"]],
-    [colors.green["700"], colors.green["600"]],
-  ][playerIndex][isNana ? 1 : 0];
 }
 
 function wrapFrame(replayState: SpectateStore, frame: number): number {
