@@ -229,7 +229,9 @@ function handleEventPayloadsEvent() {
     frames: [],
     ending: undefined
   }
-  setReplayState("playbackData", initialPlaybackData);
+  // New game, reset spectate data
+  // TODO: Why does frame get mutated in defaultSpectateStoreState?
+  setReplayState({ ...defaultSpectateStoreState, playbackData: initialPlaybackData, frame: 0 });
 }
 
 function handleGameStartEvent(settings: GameStartEvent) {
