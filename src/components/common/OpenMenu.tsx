@@ -33,7 +33,7 @@ export function OpenMenu(props: { name?: string }) {
             break;
           case "live":
             setPlaybackType("spectate");
-            currentSelectionStore().clearSelection();
+            // currentSelectionStore().clearSelection();
             connectWS();
             break;
         }

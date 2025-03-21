@@ -116,7 +116,7 @@ export function jumpToLive(): void {
 export function adjust(delta: number): void {
   // TODO: Computed frame count signal
   setReplayState("frame", (f) =>
-    Math.min(f + delta, replayState.playbackData!.frames.length - 1));
+    Math.min(f + delta, replayState.playbackData!.frames.length - 2));
 }
 
 // TODO: Figure out how to put this in createRoot
@@ -124,7 +124,7 @@ const [running, start, stop] = createRAF(
   targetFPS(
     () => {
       const tryFrame = replayState.frame + replayState.framesPerTick;
-      if (tryFrame < replayState.playbackData!.frames.length - 1) {
+      if (tryFrame < replayState.playbackData!.frames.length - 2) {
         setReplayState("frame", tryFrame);
       }
     },
@@ -267,7 +267,21 @@ function initPlayerIfNeeded(
   return { ...frame, players };
 }
 
+function isRollbackFromFrameUpdate(frames: Frame[], frameNumber: number): boolean {
+  const maybeFrame = frames[frameNumber];
+  return Boolean(maybeFrame && maybeFrame.players);
+}
+
 function handlePreFrameUpdateEvent(playerInputs: PreFrameUpdateEvent): void {
+  if (isRollbackFromFrameUpdate(replayState.playbackData!.frames, playerInputs.frameNumber)) {
+    // Cut off stale frames, and roll back to the new playback point.
+    // Relies on updates being batched, as otherwise the frame would
+    // not yet be finished at this point.
+    const frames = replayState.playbackData!.frames.slice(0, playerInputs.frameNumber + 1);
+    setReplayState("playbackData", { ...replayState.playbackData!, frames });
+    setReplayState("frame", playerInputs.frameNumber);
+  }
+
   // Some older versions don't have the Frame Start Event so we have to
   // potentially initialize the frame in both places.
   let frame = initFrameIfNeeded(replayState.playbackData!.frames, playerInputs.frameNumber);
@@ -295,6 +309,15 @@ function handlePreFrameUpdateEvent(playerInputs: PreFrameUpdateEvent): void {
 }
 
 function handlePostFrameUpdateEvent(playerState: PostFrameUpdateEvent): void {
+  if (isRollbackFromFrameUpdate(replayState.playbackData!.frames, playerState.frameNumber)) {
+    // Cut off stale frames, and roll back to the new playback point.
+    // Relies on updates being batched, as otherwise the frame would
+    // not yet be finished at this point.
+    const frames = replayState.playbackData!.frames.slice(0, playerState.frameNumber + 1);
+    setReplayState("playbackData", { ...replayState.playbackData!, frames });
+    setReplayState("frame", playerState.frameNumber);
+  }
+
   const frame = replayState.playbackData!.frames[playerState.frameNumber];
   if (playerState.isNana) {
     const players = frame.players.slice();
